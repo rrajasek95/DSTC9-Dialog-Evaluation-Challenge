@@ -31,13 +31,14 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
 from transformers import AdamW, GPT2DoubleHeadsModel, GPT2Tokenizer, OpenAIGPTTokenizer, OpenAIGPTDoubleHeadsModel
 
+from tc_dataset import TopicalChatsDataset
 from metrics import RunningMetric, RunningLambdaMetric, MetricLambda
 from scheduler import PiecewiseLinearLR
 from utils import get_dataset
 
 logger = logging.getLogger(__file__)
 
-# The _nofact token eneds to
+# The _nofact token needs to be added
 ADDITIONAL_TOKENS = ["_nofact"]
 SPECIAL_TOKENS = ["<bos>", "<eos>", "<speaker1>", "<speaker2>", "<pad>"]
 
@@ -140,6 +141,48 @@ def pad_dataset(dataset, padding=0):
         dataset[name] = [x + [padding if name != "lm_labels" else -100] * (max_l - len(x)) for x in dataset[name]]
     return dataset
 
+def collate_batch_elements(batch, tokenizer, args):
+    """
+    Topical chats is a ridiculously large dataset (2GB+ including facts/reading set).
+    Maintaining an entire tensor dataset in memory is a terrible idea
+    since *every* input is padded to the size of the largest element.
+    The training dataset has 179k instances, so imagine padding all
+    of those to max_length (RIP RAM!)
+
+    Another point to note is that the actual number of instances per batch in this
+    implementation is num_candidates*batch_size. I haven't thought about how to
+    optimize this but I guess it'll take a bit more effort
+    - Rishi
+
+    """
+    batch_inputs = defaultdict(list)
+    chained_batch = chain(*batch)
+
+    for instance in chained_batch:
+        for field, data in instance.items():
+            batch_inputs[field].append(data)
+
+    padded_dataset = pad_dataset(batch_inputs, padding=tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS[-1]))
+
+    tensorized_input = []
+    # Verify input sent the same way:
+    #
+    # "input_ids": [Batch size, num_cands, seq_len]
+    # "mc_token_ids": [Batch size, num cands],
+    # "lm_labels": [batch size, num_cands, seq_len]
+    # "mc_labels": [batch_size]
+    # "token_type_ids": [batch_size, num_cands, seq_len]
+
+    batch_size = tuple([len(batch_inputs[MODEL_INPUTS[0]])//args.num_candidates])
+    for input_name in MODEL_INPUTS:
+        tensor = torch.tensor(padded_dataset[input_name])
+
+        if input_name != "mc_labels":
+            tensor = tensor.view((-1, args.num_candidates) + tensor.shape[1:])
+        else:
+            tensor = torch.ones(size=batch_size, dtype=torch.long) * (args.num_candidates - 1)
+        tensorized_input.append(tensor)
+    return tensorized_input
 
 def build_input_from_segments(history, response, fact, tokenizer, lm_labels=False):
     bos, eos, speaker1, speaker2 = tokenizer.convert_tokens_to_ids((SPECIAL_TOKENS[:-1]))
@@ -239,6 +282,26 @@ def get_data_loaders(args, tokenizer):
 
     return train_loader, valid_loader, train_sampler, valid_sampler
 
+def get_data_loaders_optimized(args, tokenizer):
+
+    topical_chat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache)
+
+    train_dataset, valid_dataset = TopicalChatsDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), TopicalChatsDataset(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS, args)
+
+    train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset) if args.distributed else None
+    valid_sampler = torch.utils.data.distributed.DistributedSampler(valid_dataset) if args.distributed else None
+
+    train_loader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size,
+                              collate_fn=lambda x: collate_batch_elements(x, tokenizer, args),
+                              shuffle=(not args.distributed))
+    valid_loader = DataLoader(valid_dataset, sampler=valid_sampler, batch_size=args.valid_batch_size,
+                              collate_fn=lambda x: collate_batch_elements(x, tokenizer, args),
+                              shuffle=False)
+
+    # logger.info("Train dataset (Batch, Candidates, Seq length): {}".format(train_dataset[0][0].shape))
+    # logger.info("Valid dataset (Batch, Candidates, Seq length): {}".format(valid_dataset[0][0].shape))
+
+    return train_loader, valid_loader, train_sampler, valid_sampler
 
 def run_train(model, optimizer, scheduler, train_loader, writer, args):
     running_loss = RunningMetric()
@@ -288,6 +351,12 @@ def run_evaluation(model, val_loader, tokenizer, writer, args):
     with torch.no_grad():
         for i, batch in tqdm(enumerate(val_loader)):
             batch = tuple(input_tensor.to(args.device) for input_tensor in batch)
+
+            # [Batch size, num_ands, seq_len]
+            # [Batch size, num cands],
+            # [batch size, num_cands, seq_len]
+            # [batch_size]
+            # [batch_size, num_cands, seq_len]
             input_ids, mc_token_ids, lm_labels, mc_labels, token_type_ids = batch
             # logger.info(tokenizer.decode(input_ids[0, -1, :].tolist()))
             # if we dont send labels to model, it doesnt return losses
@@ -394,7 +463,7 @@ def train():
         torch.distributed.init_process_group(backend='nccl', init_method='env://')
 
     logger.info("Prepare datasets")
-    loaders = get_data_loaders(args, tokenizer)
+    loaders = get_data_loaders_optimized(args, tokenizer)
     train_loader, _, _, _ = loaders
 
     # Load the model after the tokenizer. We hit an OOM error if we try to pre-load the model

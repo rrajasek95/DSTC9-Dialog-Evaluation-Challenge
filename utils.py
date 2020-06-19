@@ -47,9 +47,10 @@ def get_dataset(tokenizer, dataset_path, dataset_cache):
 
 
 if __name__ == '__main__':
-    tokenizer = GPT2Tokenizer.from_pretrained('gpt2-large')
-    dataset_path = 'processed_output'
-    dataset_cache = './dataset_cache'
-
-
-    get_dataset(tokenizer, dataset_path, dataset_cache)
+    pass
+    # tokenizer = GPT2Tokenizer.from_pretrained('gpt2-large')
+    # dataset_path = 'processed_output'
+    # dataset_cache = './dataset_cache'
+    #
+    #
+    # get_dataset(tokenizer, dataset_path, dataset_cache)
