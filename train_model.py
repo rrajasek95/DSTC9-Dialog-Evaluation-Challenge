@@ -200,7 +200,7 @@ def get_data_loaders(args, tokenizer):
             candidates.append(response)
 
             for j, candidate in enumerate(candidates):
-                lm_labels = bool(j == args.num_candidates)
+                lm_labels = bool(j == args.num_candidates - 1)
                 instance = build_input_from_segments(history, candidate, fact, tokenizer, lm_labels)
 
                 for input_name, input_array in instance.items():
