@@ -102,7 +102,7 @@ def decode_sequence(input_ids, token_type_ids, model, tokenizer, args):
     for i in range(args.max_length):
         prefix_input_seq = torch.tensor(tokenizer.encode(context) + current_output).unsqueeze(0)
         truncated_tok_type_ids = token_type_ids[0][0][:prefix_input_seq.shape[-1]].unsqueeze(0)
-        logits = model(prefix_input_seq, token_type_ids=truncated_tok_type_ids)
+        logits = model(prefix_input_seq.to(args.device), token_type_ids=truncated_tok_type_ids.to(args.device))
 
         if isinstance(logits, tuple) or len(logits.shape) == 4:  # for gpt2 and maybe others
             logits = logits[0]
