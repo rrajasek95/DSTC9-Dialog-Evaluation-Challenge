@@ -188,7 +188,7 @@ def get_data_loaders(args, tokenizer):
 
     for dataset_name, dataset in topicalchat.items():
 
-        for i, dialog in enumerate(dataset[:10]):
+        for i, dialog in enumerate(dataset):
             (history, response, fact) = dialog
 
             # Truncate history turns to reduce memory requirement
