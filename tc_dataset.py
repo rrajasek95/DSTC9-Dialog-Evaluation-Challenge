@@ -12,7 +12,7 @@ class TopicalChatsDataset(Dataset):
     - Rishi
     """
     def __init__(self, dataset, tokenizer, special_tokens, args):
-        self.dataset = dataset[:10]
+        self.dataset = dataset
         self.tokenizer = tokenizer
         self.special_tokens = special_tokens
         self.max_history = args.max_history
