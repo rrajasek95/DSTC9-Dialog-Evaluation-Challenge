@@ -15,6 +15,7 @@ I am looking to investigate two variants for pretraining:
 import argparse
 import logging
 import math
+import os
 import random
 
 from collections import defaultdict
@@ -22,6 +23,7 @@ from itertools import chain
 from pprint import pformat
 
 from torch.nn import NLLLoss, CrossEntropyLoss
+from torch.utils.tensorboard import SummaryWriter
 from tqdm.auto import tqdm
 
 import torch
@@ -189,6 +191,10 @@ def get_data_loaders(args, tokenizer):
         for i, dialog in enumerate(dataset[:10]):
             (history, response, fact) = dialog
 
+            # Truncate history turns to reduce memory requirement
+            if len(history) > (2*args.max_history+1):
+                history = history[-(2*args.max_history+1):]
+
             candidates = sample_candidates(dataset, i, args)
 
             candidates.append(response)
@@ -234,8 +240,9 @@ def get_data_loaders(args, tokenizer):
     return train_loader, valid_loader, train_sampler, valid_sampler
 
 
-def run_train(model, optimizer, scheduler, train_loader, args):
+def run_train(model, optimizer, scheduler, train_loader, writer, args):
     running_loss = RunningMetric()
+    ppl = MetricLambda(math.exp, running_loss)
 
     for i, batch in tqdm(enumerate(train_loader)):
         model.train()
@@ -263,12 +270,14 @@ def run_train(model, optimizer, scheduler, train_loader, args):
 
         scheduler.step()
 
-        logger.info(f"Batch loss: {loss}")
+        writer.add_scalar('Train/loss', loss, i)
+        writer.add_scalar('Train/ppl', math.exp(loss), i)
 
-    logger.info(f"Training loss: {running_loss.get()}")
+    logger.info(f"Epoch loss: {running_loss.get()}")
+    logger.info(f"Epoch PPL: {ppl.get()}")
 
 
-def run_evaluation(model, val_loader, tokenizer, args):
+def run_evaluation(model, val_loader, tokenizer, writer, args):
     model.eval()
 
     running_nll = RunningLambdaMetric(CrossEntropyLoss(ignore_index=-100))
@@ -298,11 +307,11 @@ def run_evaluation(model, val_loader, tokenizer, args):
     logger.info(f"NLL Loss: {running_nll.get()}")
     logger.info(f"Perlexity: {ppl.get()}")
 
-def run_training(model, optimizer, scheduler, loaders, tokenizer, args):
+def run_training(model, optimizer, scheduler, loaders, tokenizer, writer, args):
     train_loader, val_loader, train_sampler, valid_sampler = loaders
 
     if args.eval_before_start:
-        run_evaluation(model, val_loader, tokenizer, args)
+        run_evaluation(model, val_loader, tokenizer, writer, args)
 
     for epoch in range(args.n_epochs):
         if args.distributed:
@@ -311,13 +320,13 @@ def run_training(model, optimizer, scheduler, loaders, tokenizer, args):
             valid_sampler.set_epoch(epoch)
 
         # Run training step
-        run_train(model, optimizer, scheduler, train_loader, args)
+        run_train(model, optimizer, scheduler, train_loader, writer, args)
 
         # Training step done, now evaluate
-        run_evaluation(model, val_loader, tokenizer, args)
+        run_evaluation(model, val_loader, tokenizer, writer, args)
 
     if args.n_epochs < 1:
-        run_evaluation(model, val_loader, tokenizer, args)
+        run_evaluation(model, val_loader, tokenizer, writer, args)
 
 
 def train():
@@ -349,7 +358,10 @@ def train():
                         help="Set to O0, O1, O2 or O3 for fp16 training (see apex documentation)")
     parser.add_argument("--local_rank", type=int, default=-1,
                         help="Local rank for distributed training (-1: not distributed)")
-
+    parser.add_argument('--log_dir', type=str, default="runs/",
+                        help="Output log directory for summary")
+    parser.add_argument('--experiment_name', type=str, default="topical_chats_gpt2",
+                        help="Name of experiment for logging purposes")
     # Decoding arguments
     parser.add_argument("--temperature", type=int, default=0.7, help="Sampling softmax temperature")
     parser.add_argument("--top_k", type=int, default=0, help="Filter top-k tokens before sampling (<=0: no filtering)")
@@ -388,13 +400,19 @@ def train():
     model_class = GPT2DoubleHeadsModel if "gpt2" in args.model_checkpoint else OpenAIGPTDoubleHeadsModel
     model = model_class.from_pretrained(args.model_checkpoint)
     model.to(args.device)
+
     # Add special tokens if they are not already added
     if num_added_tokens > 0:
         model.resize_token_embeddings(new_num_tokens=orig_num_tokens + num_added_tokens)
+
     optimizer = AdamW(model.parameters(), lr=args.lr, correct_bias=True)
 
     scheduler = PiecewiseLinearLR(optimizer, [(0, args.lr), (args.n_epochs * len(train_loader), 0.0)])
-    run_training(model, optimizer, scheduler, loaders, tokenizer, args)
+
+    writer = SummaryWriter(
+        log_dir=os.path.join(args.log_dir, args.experiment_name))
+
+    run_training(model, optimizer, scheduler, loaders, tokenizer, writer, args)
 
 if __name__ == '__main__':
     train()
