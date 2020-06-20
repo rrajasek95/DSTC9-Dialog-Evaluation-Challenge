@@ -26,7 +26,7 @@ class RunningLambdaMetric(RunningMetric):
         super().__init__()
 
     def add(self, *args, **kwargs):
-        self._add(self.func(*args, **kwargs))
+        self._add(float(self.func(*args, **kwargs)))
 
 class MetricLambda(Metric):
     def __init__(self, fn, metric):

@@ -319,7 +319,7 @@ def run_train(model, optimizer, scheduler, train_loader, writer, args):
         loss = (lm_loss * args.lm_coef + mc_loss * args.mc_coef) / args.gradient_accumulation_steps
 
         # Average loss across all items in the batch
-        running_loss.add(loss.mean())
+        running_loss.add(float(loss))
 
         if args.fp16:
             with amp.scale_loss(loss, optimizer) as scaled_loss:
@@ -334,8 +334,8 @@ def run_train(model, optimizer, scheduler, train_loader, writer, args):
 
         scheduler.step()
 
-        writer.add_scalar('Train/loss', loss, i)
-        writer.add_scalar('Train/ppl', math.exp(loss), i)
+        writer.add_scalar('Train/loss', float(loss), i)
+        writer.add_scalar('Train/ppl', math.exp(float(loss)), i)
 
     logger.info(f"Epoch loss: {running_loss.get()}")
     logger.info(f"Epoch PPL: {ppl.get()}")
