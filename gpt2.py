@@ -23,10 +23,10 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
-from transformer.activations import ACT2FN
-from transformer.configuration_gpt2 import GPT2Config
-from transformer.file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from transformer.modeling_utils import Conv1D, PreTrainedModel, SequenceSummary, prune_conv1d_layer
+from transformers.activations import ACT2FN
+from transformers.configuration_gpt2 import GPT2Config
+from transformers.file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from transformers.modeling_utils import Conv1D, PreTrainedModel, SequenceSummary, prune_conv1d_layer
 
 
 logger = logging.getLogger(__name__)
