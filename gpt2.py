@@ -22,6 +22,7 @@ import os
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
+from torch.utils.checkpoint import checkpoint
 
 from transformers.activations import ACT2FN
 from transformers.configuration_gpt2 import GPT2Config
@@ -228,7 +229,7 @@ class Block(nn.Module):
         self.ln_2 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
         self.mlp = MLP(4 * nx, config)
 
-    def forward(self, x, layer_past=None, attention_mask=None, head_mask=None, use_cache=False):
+    def forward(self, x, layer_past=None, attention_mask=None, head_mask=None, use_cache=True):
         output_attn = self.attn(
             self.ln_1(x),
             layer_past=layer_past,
@@ -243,7 +244,7 @@ class Block(nn.Module):
         x = x + m
 
         outputs = [x] + output_attn[1:]
-        return outputs  # x, present, (attentions)
+        return tuple(outputs)  # x, present, (attentions)
 
 
 class GPT2PreTrainedModel(PreTrainedModel):
@@ -480,13 +481,15 @@ class GPT2Model(GPT2PreTrainedModel):
             if self.output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states.view(*output_shape),)
 
-            outputs = block(
-                hidden_states,
-                layer_past=layer_past,
-                attention_mask=attention_mask,
-                head_mask=head_mask[i],
-                use_cache=use_cache,
-            )
+            # outputs = block(
+            #     hidden_states,
+            #     layer_past=layer_past,
+            #     attention_mask=attention_mask,
+            #     head_mask=head_mask[i],
+            #     use_cache=use_cache,
+            # )
+
+            outputs = checkpoint(block, hidden_states, layer_past, attention_mask, head_mask[i])
 
             hidden_states, present = outputs[:2]
             if use_cache is True:
