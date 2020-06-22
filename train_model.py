@@ -421,6 +421,10 @@ def train():
     parser.add_argument("--n_epochs", type=int, default=3, help="Number of training epochs")
     # parser.add_argument("--personality_permutations", type=int, default=1,
     #                     help="Number of permutations of personality sentences")
+
+    parser.add_argument('--max_fact_length', type=int, default=200,
+                        help='Number of fact tokens to include in the input')
+
     parser.add_argument("--eval_before_start", action='store_true',
                         help="If true start with a first evaluation before training")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu",

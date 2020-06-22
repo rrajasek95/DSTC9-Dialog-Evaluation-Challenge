@@ -15,8 +15,11 @@ class TopicalChatsDataset(Dataset):
         self.dataset = dataset
         self.tokenizer = tokenizer
         self.special_tokens = special_tokens
+
+        # Args to control memory footprint
         self.max_history = args.max_history
         self.num_candidates = args.num_candidates
+        self.max_fact_length = args.max_fact_length
 
     def __getitem__(self, index):
         (history, response, fact) = self.dataset[index]
@@ -24,6 +27,8 @@ class TopicalChatsDataset(Dataset):
         # Truncate history turns to reduce memory requirement
         if len(history) > (2 * self.max_history + 1):
             history = history[-(2 * self.max_history + 1):]
+
+        history, fact = self.truncate_sequences(history, fact)
 
         candidates = self.sample_candidates(self.dataset, index)
         candidates.append(response)
@@ -78,3 +83,14 @@ class TopicalChatsDataset(Dataset):
         if lm_labels:
             instance["lm_labels"] = ([-100] * sum(len(s) for s in sequence[:-1])) + [-100] + sequence[-1][1:]
         return instance
+
+    def truncate_sequences(self, history, fact):
+        # Truncate history turns to reduce memory requirement
+        if len(history) > (2 * self.max_history + 1):
+            history = history[-(2 * self.max_history + 1):]
+
+        # Truncate facts to decrease overall input length
+        trunc_facts = fact[:min(len(fact), self.max_fact_length)]
+        return history, trunc_facts
+
+
