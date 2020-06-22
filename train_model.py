@@ -35,7 +35,7 @@ from gpt2 import GPT2DoubleHeadsModel
 from tc_dataset import TopicalChatsDataset
 from metrics import RunningMetric, RunningLambdaMetric, MetricLambda
 from scheduler import PiecewiseLinearLR
-from utils import get_dataset
+from utils import get_dataset, GlobalStepCounter, CONFIG_NAME
 
 logger = logging.getLogger(__file__)
 
@@ -304,7 +304,19 @@ def get_data_loaders_optimized(args, tokenizer):
 
     return train_loader, valid_loader, train_sampler, valid_sampler
 
-def run_train(model, optimizer, scheduler, train_loader, writer, args):
+
+def save_model(model, checkpoint_name, args):
+    checkpoint_dir = os.path.join(args.log_dir, args.experiment_name, 'checkpoints')
+
+    if not os.path.exists(checkpoint_dir):
+        os.makedirs(checkpoint_dir)
+
+    checkpoint_file = os.path.join(checkpoint_dir, checkpoint_name + '.pth')
+    torch.save({"mymodel": getattr(model, 'module', model)}, checkpoint_file)
+    logger.info(f"Checkpoint saved to: {checkpoint_file}")
+
+
+def run_train(model, optimizer, scheduler, train_loader, writer, step_counter, args):
     running_loss = RunningMetric()
     ppl = MetricLambda(math.exp, running_loss)
 
@@ -333,9 +345,18 @@ def run_train(model, optimizer, scheduler, train_loader, writer, args):
             optimizer.zero_grad()
 
         scheduler.step()
+        step_counter.step()
 
-        writer.add_scalar('Train/loss', float(loss), i)
-        writer.add_scalar('Train/ppl', math.exp(float(loss)), i)
+        if step_counter.get() % args.save_every_n == 0:
+            # Save checkpoint of model
+            # Since this is a fine-tuning task, we prefer to
+            # save more frequently
+            # than if we are simply pretraining the model
+            save_model(model, f'checkpoint_{step_counter.get()}', args)
+
+        writer.add_scalar('Train/loss', float(loss), step_counter.get())
+        writer.add_scalar('Train/ppl', math.exp(float(loss)), step_counter.get())
+
 
     logger.info(f"Epoch loss: {running_loss.get()}")
     logger.info(f"Epoch PPL: {ppl.get()}")
@@ -381,6 +402,8 @@ def run_evaluation(model, val_loader, tokenizer, writer, args):
 def run_training(model, optimizer, scheduler, loaders, tokenizer, writer, args):
     train_loader, val_loader, train_sampler, valid_sampler = loaders
 
+    step_counter = GlobalStepCounter()
+
     if args.eval_before_start:
         run_evaluation(model, val_loader, tokenizer, writer, args)
 
@@ -391,7 +414,7 @@ def run_training(model, optimizer, scheduler, loaders, tokenizer, writer, args):
             valid_sampler.set_epoch(epoch)
 
         # Run training step
-        run_train(model, optimizer, scheduler, train_loader, writer, args)
+        run_train(model, optimizer, scheduler, train_loader, writer, step_counter, args)
 
         # Training step done, now evaluate
         run_evaluation(model, val_loader, tokenizer, writer, args)
@@ -399,6 +422,11 @@ def run_training(model, optimizer, scheduler, loaders, tokenizer, writer, args):
     if args.n_epochs < 1:
         run_evaluation(model, val_loader, tokenizer, writer, args)
 
+def save_model_config(model, tokenizer, args):
+    log_dir = args.log_dir
+    torch.save(args, os.path.join(log_dir, args.experiment_name, 'model_training_args.bin'))
+    getattr(model, 'module', model).config.to_json_file(os.path.join(log_dir,args.experiment_name, CONFIG_NAME))
+    tokenizer.save_pretrained(os.path.join(log_dir, args.experiment_name))
 
 def train():
     parser = argparse.ArgumentParser()
@@ -427,6 +455,14 @@ def train():
 
     parser.add_argument("--eval_before_start", action='store_true',
                         help="If true start with a first evaluation before training")
+    parser.add_argument('--log_every_n', type=int, default=500,
+                        help='Number of iterations to run before logging')
+    # This is a notoriously difficult model to train, so we prefer to save
+    # as frequently as possible
+    parser.add_argument('--save_every_n', type=int, default=5000,
+                        help='Number of iterations to run before saving the model')
+    # TODO: implement some mechanism to resume training. Need more sophisticated state management
+
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu",
                         help="Device (cuda or cpu)")
     parser.add_argument("--fp16", type=str, default="",
@@ -436,7 +472,7 @@ def train():
     parser.add_argument('--log_dir', type=str, default="runs/",
                         help="Output log directory for summary")
     parser.add_argument('--experiment_name', type=str, default="topical_chats_gpt2",
-                        help="Name of experiment for logging purposes")
+                        help="Name of experiment for logging and checkpointing purposes")
     # Decoding arguments
     parser.add_argument("--temperature", type=int, default=0.7, help="Sampling softmax temperature")
     parser.add_argument("--top_k", type=int, default=0, help="Filter top-k tokens before sampling (<=0: no filtering)")
@@ -487,6 +523,10 @@ def train():
     writer = SummaryWriter(
         log_dir=os.path.join(args.log_dir, args.experiment_name))
 
+
+    # Save configuration
+    save_model_config(model, tokenizer, args)
+    # save_model(model, 'test_checkpoint', args)
     run_training(model, optimizer, scheduler, loaders, tokenizer, writer, args)
 
 if __name__ == '__main__':

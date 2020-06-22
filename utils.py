@@ -4,6 +4,8 @@ import os
 import torch
 from transformers import GPT2Tokenizer
 
+CONFIG_NAME = 'config.json'
+
 logger = logging.getLogger(__file__)
 
 def load_data(dataset_path, split):
@@ -45,6 +47,15 @@ def get_dataset(tokenizer, dataset_path, dataset_cache):
         torch.save(dataset, dataset_cache)
     return dataset
 
+class GlobalStepCounter(object):
+    def __init__(self):
+        self.num_steps = 0
+
+    def get(self):
+        return self.num_steps
+
+    def step(self):
+        self.num_steps += 1
 
 if __name__ == '__main__':
     pass
