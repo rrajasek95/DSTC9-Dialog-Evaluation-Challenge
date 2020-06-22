@@ -16,7 +16,7 @@ Performs the following kinds of annotations:
 2. Dialog act annotation (WIP; Need to set up the DA tagger module)
 """
 
-def flair_annotate(tagger, split_data, split):
+def flair_annotate(tagger, split_data):
     for conv_id, dialog_data in tqdm(split_data.items()):
 
         for turn in dialog_data["content"]:
@@ -40,9 +40,7 @@ def flair_annotate(tagger, split_data, split):
             if flair_entities:
                 turn["flair_entities"] = flair_entities
 
-
-    with open(os.path.join('tc_processed', split + '_anno_flair.json'), 'w') as annotated_file:
-        json.dump(split_data, annotated_file)
+    return split_data
 
 
 def annotate_split(nlp, split_data, split):
@@ -119,7 +117,10 @@ def perform_flair_enhanced_anno(args):
         with open(os.path.join(data_dir, split + '_anno.json'), 'r') as data_file:
             split_data = json.load(data_file)
 
-        flair_annotate(tagger, split_data, split)
+        annotated_split = flair_annotate(tagger, split_data)
+
+        with open(os.path.join(data_dir, split + '_anno_flair.json'), 'w') as annotated_file:
+            json.dump(annotated_split, annotated_file)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
