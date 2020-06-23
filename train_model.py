@@ -28,9 +28,9 @@ from tqdm.auto import tqdm
 
 import torch
 import torch.nn.functional as F
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader
 from transformers import AdamW, GPT2Tokenizer, OpenAIGPTTokenizer, OpenAIGPTDoubleHeadsModel
-from model.gpt2 import GPT2DoubleHeadsModel
+from gpt2 import GPT2DoubleHeadsModel
 
 from tc_dataset import TopicalChatsDataset
 from metrics import RunningMetric, RunningLambdaMetric, MetricLambda
