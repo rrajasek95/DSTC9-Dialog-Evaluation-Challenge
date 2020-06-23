@@ -354,8 +354,8 @@ def run_train(model, optimizer, scheduler, train_loader, writer, step_counter, a
             # than if we are simply pretraining the model
             save_model(model, f'checkpoint_{step_counter.get()}', args)
 
-        writer.add_scalar('Train/loss', float(loss), step_counter.get())
-        writer.add_scalar('Train/ppl', math.exp(float(loss)), step_counter.get())
+        writer.add_scalar('Train/loss', float(running_loss.get()), step_counter.get())
+        writer.add_scalar('Train/ppl', math.exp(float(running_loss.get())), step_counter.get())
 
 
     logger.info(f"Epoch loss: {running_loss.get()}")
