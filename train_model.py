@@ -22,7 +22,7 @@ from collections import defaultdict
 from itertools import chain
 from pprint import pformat
 
-from torch.nn import NLLLoss, CrossEntropyLoss
+from torch.nn import CrossEntropyLoss
 from torch.utils.tensorboard import SummaryWriter
 from tqdm.auto import tqdm
 
@@ -30,7 +30,7 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
 from transformers import AdamW, GPT2Tokenizer, OpenAIGPTTokenizer, OpenAIGPTDoubleHeadsModel
-from gpt2 import GPT2DoubleHeadsModel
+from model.gpt2 import GPT2DoubleHeadsModel
 
 from tc_dataset import TopicalChatsDataset
 from metrics import RunningMetric, RunningLambdaMetric, MetricLambda
