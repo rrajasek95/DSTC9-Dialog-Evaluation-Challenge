@@ -186,7 +186,14 @@ def generate_submissions(args):
     tokenizer = tokenizer_class.from_pretrained(args.model_metadata_path)
 
     model_class = GPT2DoubleHeadsModel if "gpt2" in args.model_checkpoint else OpenAIGPTDoubleHeadsModel
-    model = model_class.from_pretrained(args.model_checkpoint)
+
+    # This is not the proper way to load the model! This is a hack to be able to generate outputs from the
+    # model I previously trained. This needs to be fixed in the original training script as well
+    data = torch.load(args.model_checkpoint + '/pytorch_model.bin')
+    model = data["mymodel"]
+    print(model)
+
+    # model = model_class.from_pretrained(args.model_checkpoint)
     model.to(args.device)
 
     val_loader, valid_sampler = get_validation_loader(args, tokenizer)
