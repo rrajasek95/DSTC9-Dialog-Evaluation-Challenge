@@ -8,6 +8,8 @@ from flair.models import SequenceTagger
 
 from tqdm.auto import tqdm
 
+from annotators.spotlight import SpotlightTagger
+
 """
 Script to perform annotation of Topical Chats data.
 
@@ -54,8 +56,6 @@ def annotate_split(nlp, split_data, split):
             segments = []
             for sent in doc.sents:
                 segment_info = {"text": sent.text}
-
-                entity_list = []
                 segments.append(segment_info)
             entity_list = []
             for ent in doc.ents:
@@ -122,15 +122,58 @@ def perform_flair_enhanced_anno(args):
         with open(os.path.join(data_dir, split + '_anno_flair.json'), 'w') as annotated_file:
             json.dump(annotated_split, annotated_file)
 
+
+def spotlight_annotate(tagger, split_data):
+    for conv_id, dialog_data in tqdm(split_data.items()):
+
+        for turn in dialog_data["content"]:
+
+            message = turn["message"]
+
+            spotlight_entities = tagger.get_spotlight_annotation(message, confidence=0.5)
+
+            if spotlight_entities:
+                turn["dbpedia_entities"] = spotlight_entities
+            print(spotlight_entities)
+
+    return split_data
+
+def perform_spotlight_anno(args):
+    data_dir = os.path.join(
+        args.data_dir,
+        'tc_processed'
+    )
+
+    splits = [
+        'train',
+        'valid_freq',
+        'valid_rare',
+        'test_freq',
+        'test_rare'
+    ]
+
+    tagger = SpotlightTagger(
+        ontology_json='annotators/ontology_classes.json',
+        spotlight_server_url='http://localhost:2222/rest/annotate')
+    for split in splits:
+        with open(os.path.join(data_dir, split + '_anno.json'), 'r') as data_file:
+            split_data = json.load(data_file)
+
+        annotated_split = spotlight_annotate(tagger, split_data)
+
+        with open(os.path.join(data_dir, split + '_anno_spotlight.json'), 'w') as annotated_file:
+            json.dump(annotated_split, annotated_file)
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_dir', type=str, default='./',
                         help='Base directory for the data')
 
     args = parser.parse_args()
-    try:
-        perform_flair_enhanced_anno(args)
-    except:
-        # Lazy hacky way to perform flair annotation on existing data
-        annotate_fresh_tc_data(args)
-        perform_flair_enhanced_anno(args)
+    perform_spotlight_anno(args)
+    # try:
+    #     perform_flair_enhanced_anno(args)
+    # except:
+    #     # Lazy hacky way to perform flair annotation on existing data
+    #     annotate_fresh_tc_data(args)
+    #     perform_flair_enhanced_anno(args)
