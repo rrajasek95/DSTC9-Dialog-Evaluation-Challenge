@@ -108,7 +108,8 @@ def decode_sequences(input_ids, token_type_ids, model, tokenizer, args):
             if prev.item() in special_tokens_ids:
                 while prev.item() in special_tokens_ids:
                     if probs.max().item() == 1:
-                        logger.warn("Warning: model generating special token with probability 1.")
+                        # Disabled this rather noisy warning
+                        # logger.warn("Warning: model generating special token with probability 1.")
                         break  # avoid infinitely looping over special token
                     prev = torch.multinomial(probs, num_samples=1)
             if prev.item() in special_tokens_ids:
@@ -117,7 +118,6 @@ def decode_sequences(input_ids, token_type_ids, model, tokenizer, args):
 
         output = tokenizer.decode(current_output)
         outputs.append(output + '\n')
-        logger.info(output)
     return outputs
 
 def pad_dataset(dataset, padding=0):
@@ -206,6 +206,9 @@ def generate_submissions(args):
 
             outputs += decode_sequences(input_ids, token_type_ids, model, tokenizer, args)
 
+            if i % args.log_every_n == 0:
+                logger.info(f"Sample output: {outputs[i*args.valid_batch_size]}")  # Log first sentence of that batch
+
     with open(args.output_file_path, 'w') as output_file:
         output_file.writelines(outputs)
 
@@ -233,7 +236,8 @@ if __name__ == '__main__':
     parser.add_argument("--local_rank", type=int, default=-1,
                         help="Local rank for distributed training (-1: not distributed)")
     parser.add_argument('--output_file_path', type=str, default='submissions/submissions.txt')
-
+    parser.add_argument('--log_every_n', type=int, default=20,
+                        help="Log a sample of outputs after every n iterations")
     # Decoding arguments
     parser.add_argument("--temperature", type=int, default=0.7, help="Sampling softmax temperature")
     parser.add_argument("--top_k", type=int, default=0, help="Filter top-k tokens before sampling (<=0: no filtering)")
