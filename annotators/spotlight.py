@@ -150,7 +150,8 @@ class SpotlightTagger(object):
         """
         retval = []
         if surface_form:
-            retval = [{'start': m.start(), 'end': m.end()} for m in re.finditer(r'\b{}\b'.format(surface_form), text)]
+            retval = [{'start': m.start(), 'end': m.end()} for m in re.finditer(r'\b{}\b'.format(
+                surface_form.replace("(", "\\(").replace(")", "\\(")), text)]
         return retval if retval else None
 
 
