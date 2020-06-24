@@ -63,6 +63,9 @@ class BertScoreMetric(NLPReferenceMetric):
     def __repr__(self):
         return f'BertScore({self.arg_dict})'
 
+    def compute(self, hypotheses, references):
+        return sum(super().compute(hypotheses, references)['f1']) / len(hypotheses)
+
 
 class UnigramFScoreMetric(ReferenceMetric):
     def __init__(self, beta=1):
