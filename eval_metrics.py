@@ -141,6 +141,7 @@ if __name__ == '__main__':
         NGramDiversity(n=2)
     ]
 
+    print(f"Number of examples n={len(predictions)}\n")
 
     for metric in metrics:
         if isinstance(metric, ReferenceFreeMetric):
