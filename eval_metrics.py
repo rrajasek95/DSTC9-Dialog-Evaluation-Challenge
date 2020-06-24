@@ -104,7 +104,7 @@ class NGramDiversity(ReferenceFreeMetric):
         return len(set(n_grams)) / len(n_grams)
 
     def compute(self, hypotheses):
-        return sum([self._diversity(hyp.split()) for hyp in hypotheses])
+        return sum([self._diversity(hyp.split()) for hyp in hypotheses]) / len(hypotheses)
 
     def __repr__(self):
         return f'{self.n}-gram diversity'
@@ -125,10 +125,16 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     with open(args.predictions_file, 'r') as predictions_file:
-        predictions = [line.strip() for line in predictions_file]
+        predictions = [line
+                           .strip()
+                           .replace(".", " .").replace("?", " ?")
+                           .replace(",", " ,")
+                           .replace("'", " ' ")
+                           .replace("dn't", "d n't")
+                       for line in predictions_file]
 
     with open(args.references_file, 'r') as references_file:
-        references = [line.replace("_go", "").replace("_eos", "") for line in references_file]
+        references = [line.replace("_go", "").replace("_eos", "").strip() for line in references_file]
 
     assert len(predictions) == len(references), "The number of predictions and references do not match!"
 
