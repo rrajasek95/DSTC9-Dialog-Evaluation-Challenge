@@ -1,4 +1,6 @@
-from numpy.random import choice
+import itertools
+import operator
+import random
 
 # Dialog Act Labels
 NO_DIALOGUE_ACT = "NoDialogueAct"
@@ -15,6 +17,30 @@ FEEDBACK = "Feedback"
 
 
 class DialogPolicy(object):
+    """
+    DialogPolicy
+
+    Implements an abstract knowledge-grounded dialog policy.
+    The base class presupposes that the dialog state contains the knowledge already selected
+    (i.e. an oracle provides the knowledge). this is not what Hedayatnia et al. 2020
+    assumes (it has a knowledge selection policy), but we do so for the sake of simplicity
+    """
+
+    def choice(self, acts, weights):
+        weights = itertools.accumulate(weights, func=operator.add)
+
+        x = random.random()
+
+        for i, weight in enumerate(weights):
+            if x < weight:
+                return acts[i]
+
+        # Corner case in case some issue with weights arises
+        return acts[-1]
+
+    def retrieve_knowledge(self, dialog_state):
+        return dialog_state["knowledge"]
+
     def _get_action_space(self, dialog_state):
         """
         Given a history of dialog acts,
@@ -25,7 +51,7 @@ class DialogPolicy(object):
 
     def get_action(self, dialog_state):
         actions, weights = self._get_action_space(dialog_state)
-        action = choice(actions, p=weights)
+        action = self.choice(actions, weights)
         return action
 
     def _includes_knowledge(self, act):
@@ -36,8 +62,8 @@ class DialogPolicy(object):
 
     def get_knowledge_grounded_action(self, dialog_state):
         action = self.get_action(dialog_state)
-
-        if self._include_knowledge_in_acts(action, dialog_state["knowledge"], dialog_state["knowledge_history"]):
+        knowledge = self.retrieve_knowledge(dialog_state)
+        if self._include_knowledge_in_acts(action, knowledge, dialog_state["knowledge_history"]):
             return action, dialog_state["knowledge"]
         else:
             return action, ""
@@ -147,5 +173,91 @@ class KnowledgeIndependentAllQ(DialogPolicy):
 
 
 class KnowledgeDependent(DialogPolicy):
+    """
+    Knowledge Dependent Dialog Policy
+
+    This was sort of implemented like the original paper since there is no
+    clean design I could think of in the short term, although I prefer something
+    better.
+    """
     def get_knowledge_grounded_action(self, dialog_state):
-        pass
+        da_history = dialog_state["da_history"]
+        knowledge = self.retrieve_knowledge(dialog_state)
+
+        if len(da_history) == 0:
+            acts = [[SALUTATION, STATEMENT], [SALUTATION], PROP_Q]
+            include_knowledge = {STATEMENT: True, PROP_Q: True, SALUTATION: True}
+            weights = [0.5, 0.5]
+        else:
+            knowledge_history = dialog_state["knowledge_history"]
+            if knowledge_history[-1] == knowledge:
+                if da_history[-1] == STATEMENT:
+                    acts = [[FEEDBACK, STATEMENT],
+                            [FEEDBACK, PROP_Q]]
+
+                    include_knowledge = {
+                        STATEMENT: True,
+                        PROP_Q: True,
+                        FEEDBACK: False
+                    }
+                    weights = [0.5, 0.5]
+
+                elif da_history[-1] == PROP_Q:
+                    acts = [[STATEMENT, PROP_Q], [FEEDBACK, PROP_Q]]
+
+                    include_knowledge = {
+                        STATEMENT: False,
+                        PROP_Q: True,
+                        FEEDBACK: False
+                    }
+
+                    weights = [0.5, 0.5]
+
+                else:
+                    acts = [[FEEDBACK, STATEMENT]]
+                    include_knowledge = {
+                        STATEMENT: False,
+                        PROP_Q: True,
+                        FEEDBACK: False
+                    }
+
+                    weights = [1.0]
+
+            else:
+                include_knowledge = {
+                    STATEMENT: False,
+                    PROP_Q: True,
+                    FEEDBACK: False
+                }
+
+                weights = [0.5, 0.5]
+
+                if da_history[-1] == STATEMENT:
+                    acts = [[FEEDBACK, STATEMENT],
+                            [FEEDBACK, PROP_Q]
+                            ]
+                elif da_history[-1] == PROP_Q:
+                    acts = [[STATEMENT, PROP_Q],
+                            [FEEDBACK, PROP_Q]
+                            ]
+                else:
+                    acts = [[FEEDBACK, PROP_Q]]
+                    weights = [1.0]
+
+        action = self.choice(acts, weights)
+
+        if knowledge and any(include_knowledge.get(act, False) for act in action):
+            return action, dialog_state["knowledge"]
+        else:
+            return action, ""
+
+
+if __name__ == '__main__':
+    dialog_state = {
+        "knowledge": "Blah",
+        "da_history": [STATEMENT],
+        "knowledge_history": [""]
+    }
+    kd_policy = KnowledgeDependent()
+
+    print(kd_policy.get_knowledge_grounded_action(dialog_state))
