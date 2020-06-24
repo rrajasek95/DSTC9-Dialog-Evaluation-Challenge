@@ -201,7 +201,7 @@ def generate_submissions(args):
     outputs = []
     with torch.no_grad():
         for i, batch in tqdm(enumerate(val_loader)):
-            batch = tuple(input_tensor.to(args.device) for input_tensor in batch)
+            # batch = tuple(input_tensor.to(args.device) for input_tensor in batch)
             input_ids, mc_token_ids, lm_labels, mc_labels, token_type_ids = batch
 
             outputs += decode_sequences(input_ids, token_type_ids, model, tokenizer, args)
