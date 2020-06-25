@@ -28,7 +28,7 @@ def get_dataset(tokenizer, dataset_path, dataset_cache):
     else:
         logger.info("Loading dataset from %s", dataset_path)
 
-        splits = ['train', 'valid_freq']
+        splits = ['train', 'valid_freq', 'test_freq', 'test_rare', 'valid_rare']
 
         dataset = dict()
 

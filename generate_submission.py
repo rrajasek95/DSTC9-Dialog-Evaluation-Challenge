@@ -170,15 +170,21 @@ def collate_batch_elements(batch, tokenizer, args):
         tensorized_input.append(tensor)
     return tensorized_input
 
-def get_validation_loader(args, tokenizer):
+def get_loader(args, tokenizer):
     topical_chat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache)
-    valid_dataset = TopicalChatsDataset(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS, args)
-    valid_sampler = torch.utils.data.distributed.DistributedSampler(valid_dataset) if args.distributed else None
-    valid_loader = DataLoader(valid_dataset, sampler=valid_sampler, batch_size=args.valid_batch_size,
+
+    splits = list(topical_chat.keys())
+    for split in splits:
+        if split != args.split:
+            del topical_chat[split]
+        # Free up memory from unneeded splits
+    dataset = TopicalChatsDataset(topical_chat[args.split], tokenizer, SPECIAL_TOKENS, args)
+    sampler = torch.utils.data.distributed.DistributedSampler(dataset) if args.distributed else None
+    loader = DataLoader(dataset, sampler=sampler, batch_size=args.valid_batch_size,
                               collate_fn=lambda x: collate_batch_elements(x, tokenizer, args),
                               shuffle=False)
 
-    return valid_loader, valid_sampler
+    return loader, sampler
 
 def generate_submissions(args):
 
@@ -196,11 +202,11 @@ def generate_submissions(args):
     # model = model_class.from_pretrained(args.model_checkpoint)
     model.to(args.device)
 
-    val_loader, valid_sampler = get_validation_loader(args, tokenizer)
+    loader, sampler = get_loader(args, tokenizer)
 
     outputs = []
     with torch.no_grad():
-        for i, batch in tqdm(enumerate(val_loader)):
+        for i, batch in tqdm(enumerate(loader)):
             # batch = tuple(input_tensor.to(args.device) for input_tensor in batch)
             input_ids, mc_token_ids, lm_labels, mc_labels, token_type_ids = batch
 
@@ -222,6 +228,10 @@ if __name__ == '__main__':
                         help="Path or url of the dataset. If empty download from S3.")
     parser.add_argument('--model_checkpoint', type=str, default="runs/topical_chats_gpt2/",
                         help="Path, url or short name of the model")
+    parser.add_argument("--split", type=str,
+                        choices=['valid_freq', 'test_freq', 'valid_rare', 'test_rare'],
+                        default='valid_freq',
+                        help='Split of topical chats to generate outputs for')
     parser.add_argument('--model_metadata_path', type=str, default='runs/topical_chats_gpt2',
                         help='Path to the tokenizer and model configuration')
     parser.add_argument("--num_candidates", type=int, default=2, help="Number of candidates for training")
