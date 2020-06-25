@@ -9,6 +9,7 @@ from flair.models import SequenceTagger
 from tqdm.auto import tqdm
 
 from annotators.spotlight import SpotlightTagger
+from annotators.vader import VaderSentimentTagger
 
 """
 Script to perform annotation of Topical Chats data.
@@ -17,6 +18,7 @@ Performs the following kinds of annotations:
 1. Sentence (sub-turn) level Named Entity recognition (NER)
 2. Dialog act annotation (WIP; Need to set up the DA tagger module)
 """
+
 
 def flair_annotate(tagger, split_data):
     for conv_id, dialog_data in tqdm(split_data.items()):
@@ -32,7 +34,6 @@ def flair_annotate(tagger, split_data):
             flair_entities = []
 
             for entity in sentence.get_spans('ner'):
-
                 flair_entities.append({
                     "surface": entity.to_original_text(),
                     "start_pos": entity.start_pos,
@@ -45,8 +46,44 @@ def flair_annotate(tagger, split_data):
     return split_data
 
 
-def annotate_split(nlp, split_data, split):
+def vader_annotate(tagger, split_data):
+    for conv_id, dialog_data in tqdm(split_data.items()):
+        for turn in dialog_data["content"]:
+            sentiment_segments = []
+            for segment in turn["segments"]:
+                sentiment = tagger.extract_sentiment(segment["text"])
+                sentiment_segments.append(sentiment)
+            turn["sentiment_vader"] = sentiment_segments
+    return split_data
 
+
+def perform_vader_annotation(args):
+    data_dir = os.path.join(
+        args.data_dir,
+        'tc_processed'
+    )
+
+    splits = [
+        'train',
+        'valid_freq',
+        'valid_rare',
+        'test_freq',
+        'test_rare'
+    ]
+
+    tagger = VaderSentimentTagger()
+
+    for split in splits:
+        with open(os.path.join(data_dir, split + '_anno_switchboard.json'), 'r') as data_file:
+            split_data = json.load(data_file)
+
+        annotated_split = vader_annotate(tagger, split_data)
+
+        with open(os.path.join(data_dir, split + '_anno_vader.json'), 'w') as annotated_file:
+            json.dump(annotated_split, annotated_file)
+
+
+def annotate_split(nlp, split_data, split):
     for conv_id, dialog_data in tqdm(split_data.items()):
 
         for turn in dialog_data["content"]:
@@ -97,6 +134,7 @@ def annotate_fresh_tc_data(args):
 
         annotate_split(nlp, split_data, split)
 
+
 def perform_flair_enhanced_anno(args):
     data_dir = os.path.join(
         args.data_dir,
@@ -138,6 +176,7 @@ def spotlight_annotate(tagger, split_data):
 
     return split_data
 
+
 def perform_spotlight_anno(args):
     data_dir = os.path.join(
         args.data_dir,
@@ -164,13 +203,16 @@ def perform_spotlight_anno(args):
         with open(os.path.join(data_dir, split + '_anno_spotlight.json'), 'w') as annotated_file:
             json.dump(annotated_split, annotated_file)
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_dir', type=str, default='./',
                         help='Base directory for the data')
 
     args = parser.parse_args()
-    perform_spotlight_anno(args)
+    perform_vader_annotation(args)
+
+    # perform_spotlight_anno(args)
     # try:
     #     perform_flair_enhanced_anno(args)
     # except:
