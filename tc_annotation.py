@@ -204,13 +204,72 @@ def perform_spotlight_anno(args):
             json.dump(annotated_split, annotated_file)
 
 
+def merge_data(merged_split, merging_data, fields):
+    for conversation_id, data in merged_split.items():
+        merging_conv = merging_data[conversation_id]
+
+        for (m1, m2) in zip(data["content"], merging_conv["content"]):
+            # Since all the fields are at the segment level, we can merge it directly into the segments
+
+            for field in fields:
+                m1[field] = m2[field]
+
+
+
+def merge_all_annotations(args):
+    splits = [
+        'train',
+        'valid_freq',
+        'valid_rare',
+        'test_freq',
+        'test_rare'
+    ]
+
+    suffix_field_map = {
+        '_anno_flair_mezza_da': ['mezza_da'],
+        '_anno_vader': ['sentiment_vader', 'switchboard_da'],
+    }
+
+    # Reminder about what fields have been annotated:
+    # In '_anno_spotlight'
+    #   we have ['entities', 'dbpedia_entities', 'flair_entities']
+    # In '_anno_vader'
+    #   we have ['switchboard_da', 'sentiment_vader']
+    # In '_anno_flair_mezza_da'
+    #   we have ['mezza_da']
+
+    for split in splits:
+        merged_split = None
+
+        with open(os.path.join(
+                args.data_dir,
+                'tc_processed',
+                f"{split}_anno_spotlight.json"), 'r') as spotlight_anno_file:
+            merged_split = json.load(spotlight_anno_file)
+        for suffix, fields in suffix_field_map.items():
+            with open(os.path.join(
+                    args.data_dir,
+                    'tc_processed',
+                    f"{split}{suffix}.json"), "r") as annotated_file:
+                merging_data = json.load(annotated_file)
+
+            merge_data(merged_split, merging_data, fields)
+
+        with open(os.path.join(
+                args.data_dir,
+                'tc_processed',
+                f'{split}_full_anno.json'), 'w') as merged_anno_file:
+            json.dump(merged_split, merged_anno_file)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_dir', type=str, default='./',
                         help='Base directory for the data')
 
     args = parser.parse_args()
-    perform_vader_annotation(args)
+    merge_all_annotations(args)
+    # perform_vader_annotation(args)
 
     # perform_spotlight_anno(args)
     # try:
