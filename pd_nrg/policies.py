@@ -130,7 +130,7 @@ class KnowledgeIndependentPropQ(DialogPolicy):
                     [THANKING],
                     [NO_DIALOGUE_ACT]]
             weights = [0.657, 0.0343, 0.0343, 0.0343, 0.0343, 0.0343, 0.0343, 0.0343,
-                       0.0343, 0.0343, 0.0343, 0.0343]
+                       0.0343, 0.0343, 0.0343]
         return acts, weights
 
     def _includes_knowledge(self, act):
@@ -156,7 +156,7 @@ class KnowledgeIndependentAllQ(DialogPolicy):
         da_history = dialog_state["da_history"]
 
         if len(da_history) == 0:
-            acts = [[SALUTATION, STATEMENT], [SALUTATION,PROP_Q]]
+            acts = [[SALUTATION, STATEMENT], [SALUTATION, PROP_Q]]
             weights = [0.5, 0.5]
         else:
             acts = [[PROP_Q], [SET_Q], [CHOICE_Q], [FEEDBACK],
@@ -185,8 +185,8 @@ class KnowledgeDependent(DialogPolicy):
         knowledge = self.retrieve_knowledge(dialog_state)
 
         if len(da_history) == 0:
-            acts = [[SALUTATION, STATEMENT], [SALUTATION], PROP_Q]
-            include_knowledge = {STATEMENT: True, PROP_Q: True, SALUTATION: True}
+            acts = [[SALUTATION, STATEMENT], [SALUTATION, PROP_Q]]
+            include_knowledge = {STATEMENT: True, PROP_Q: True, SALUTATION: False}
             weights = [0.5, 0.5]
         else:
             knowledge_history = dialog_state["knowledge_history"]
