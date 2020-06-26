@@ -9,7 +9,7 @@ import pickle
 import spacy
 from nltk.tokenize import word_tokenize, sent_tokenize
 from rank_bm25 import BM25Okapi
-
+from sklearn.feature_extraction.text import TfidfVectorizer
 
 def extract_fact_set(factsets):
 
@@ -78,14 +78,23 @@ def index_knowledge(args):
 
         knowledge_set.update(extract_knowledge_sentences(split_knowledge))
 
+    knowledge_list = list(knowledge_set)
     print(len(knowledge_set))
-    knowledge_index = BM25Okapi(knowledge_set, tokenizer=word_tokenize)
+
+    tfidf_vec = TfidfVectorizer()
+    tfidf_vec.fit(knowledge_list)
+
+    knowledge_index = BM25Okapi(knowledge_list, tokenizer=word_tokenize)
 
     with open(os.path.join(args.data_dir,
                            'tc_processed',
                            'knowledge_index.pkl'), 'wb') as index_file:
-
-        pickle.dump(knowledge_index, index_file)
+        index_dict = {
+            "tfidf_vec": tfidf_vec,
+            "bm25_index": knowledge_index,
+            "knowledge_list": knowledge_list
+        }
+        pickle.dump(index_dict, index_file)
 
 
 if __name__ == '__main__':
