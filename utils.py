@@ -58,7 +58,7 @@ def process_split(dataset_path, split, tokenizer):
         for conv_id, conv_data in annotated_data.items():
             context = []
             for turn in conv_data["content"]:
-                current_turn_data = (tokenizer.tokenize(turn["message"]), [tokenizer.tokenize(da["da"]) for da in turn["mezza_da"]])
+                current_turn_data = (tokenizer.encode(turn["message"]), turn["mezza_da"])
                 data.append((context, current_turn_data))
                 context = context + [current_turn_data]
 

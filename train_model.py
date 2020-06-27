@@ -58,7 +58,7 @@ TRAINING_CONFIG_TOKENS = {
         "additional_tokens": ADDITIONAL_TOKENS + [NO_DIALOGUE_ACT, THANKING, DIRECTIVE,
                              COMMISSIVE, APOLOGY, CHOICE_Q, SET_Q,
                              SALUTATION, PROP_Q, STATEMENT,
-                             FEEDBACK],
+                             FEEDBACK, "_fact"],
         "special_tokens": SPECIAL_TOKENS
     }
 }
@@ -361,7 +361,8 @@ def train():
     parser.add_argument('--training_configuration', type=str, default="baseline",
                         help="Training configuration to run",
                         choices=["baseline", "kd-pd-nrg"])
-
+    parser.add_argument('--knowledge_index_path', type=str, default="./tc_processed/knowledge_index.pkl",
+                        help="Path to knowledge index file")
     parser.add_argument("--dataset_cache", type=str, default='./dataset_cache', help="Path or url of the dataset cache")
     parser.add_argument("--model_checkpoint", type=str, default="gpt2-medium",
                         help="Path, url or short name of the model")
