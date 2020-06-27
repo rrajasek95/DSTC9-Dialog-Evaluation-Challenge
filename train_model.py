@@ -32,16 +32,36 @@ from torch.utils.data import DataLoader
 from transformers import AdamW, GPT2Tokenizer, OpenAIGPTTokenizer, OpenAIGPTDoubleHeadsModel
 from gpt2 import GPT2DoubleHeadsModel
 
-from tc_dataset import TopicalChatsDataset
+from tc_dataset import TopicalChatsDataset, TopicalChatsKDDataset
 from metrics import RunningMetric, RunningLambdaMetric, MetricLambda
 from scheduler import PiecewiseLinearLR
-from utils import get_dataset, GlobalStepCounter, CONFIG_NAME
+from utils import get_dataset, GlobalStepCounter, CONFIG_NAME, augmented_tc_dataset
+
+from pd_nrg.policies import (NO_DIALOGUE_ACT, THANKING, DIRECTIVE,
+                             COMMISSIVE, APOLOGY, CHOICE_Q, SET_Q,
+                             SALUTATION, PROP_Q, STATEMENT,
+                             FEEDBACK)
 
 logger = logging.getLogger(__file__)
 
 # The _nofact token needs to be added
 ADDITIONAL_TOKENS = ["_nofact"]
 SPECIAL_TOKENS = ["<bos>", "<eos>", "<speaker1>", "<speaker2>", "<pad>"]
+
+TRAINING_CONFIG_TOKENS = {
+    "baseline": {
+        "additional_tokens": ADDITIONAL_TOKENS,
+        "special_tokens": SPECIAL_TOKENS
+    },
+
+    "kd-pd-nrg": {
+        "additional_tokens": ADDITIONAL_TOKENS + [NO_DIALOGUE_ACT, THANKING, DIRECTIVE,
+                             COMMISSIVE, APOLOGY, CHOICE_Q, SET_Q,
+                             SALUTATION, PROP_Q, STATEMENT,
+                             FEEDBACK],
+        "special_tokens": SPECIAL_TOKENS
+    }
+}
 
 ATTR_TO_SPECIAL_TOKEN = {
     'bos_token': '<bos>',
@@ -127,9 +147,9 @@ def decode_sequence(input_ids, token_type_ids, model, tokenizer, args):
     logger.info(f"\nContext: {context}\nOutput: {output}\n")
 
 
-def add_special_tokens_(tokenizer):
+def add_special_tokens_(tokenizer, training_configuration):
     """ Add special tokens to the tokenizer and the model if they have not already been added. """
-    num_added_norm_tokens = tokenizer.add_tokens(ADDITIONAL_TOKENS)
+    num_added_norm_tokens = tokenizer.add_tokens(TRAINING_CONFIG_TOKENS[training_configuration]["additional_tokens"])
     num_added_tokens = tokenizer.add_special_tokens(ATTR_TO_SPECIAL_TOKEN) # doesn't add if they are already there
 
     return num_added_tokens + num_added_norm_tokens
@@ -187,9 +207,12 @@ def collate_batch_elements(batch, tokenizer, args):
 
 def get_data_loaders_optimized(args, tokenizer):
 
-    topical_chat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache)
-
-    train_dataset, valid_dataset = TopicalChatsDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), TopicalChatsDataset(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS, args)
+    if args.training_configuration == "baseline":
+        topical_chat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache)
+        train_dataset, valid_dataset = TopicalChatsDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), TopicalChatsDataset(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS, args)
+    else:
+        topical_chat = augmented_tc_dataset(tokenizer, args.dataset_path, args.dataset_cache)
+        train_dataset, valid_dataset = TopicalChatsKDDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), TopicalChatsKDDataset(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS, args)
 
     train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset) if args.distributed else None
     valid_sampler = torch.utils.data.distributed.DistributedSampler(valid_dataset) if args.distributed else None
@@ -335,6 +358,10 @@ def train():
 
     parser.add_argument("--dataset_path", type=str, default="processed_output",
                         help="Path or url of the dataset. If empty download from S3.")
+    parser.add_argument('--training_configuration', type=str, default="baseline",
+                        help="Training configuration to run",
+                        choices=["baseline", "kd-pd-nrg"])
+
     parser.add_argument("--dataset_cache", type=str, default='./dataset_cache', help="Path or url of the dataset cache")
     parser.add_argument("--model_checkpoint", type=str, default="gpt2-medium",
                         help="Path, url or short name of the model")
@@ -396,7 +423,7 @@ def train():
 
 
     orig_num_tokens = len(tokenizer.encoder)
-    num_added_tokens = add_special_tokens_(tokenizer)
+    num_added_tokens = add_special_tokens_(tokenizer, args.training_configuration)
 
     # Initialize distributed training if needed
     args.distributed = (args.local_rank != -1)

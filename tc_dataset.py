@@ -94,3 +94,5 @@ class TopicalChatsDataset(Dataset):
         return history, trunc_facts
 
 
+class TopicalChatsKDDataset(TopicalChatsDataset):
+    pass
