@@ -6,6 +6,7 @@ import json
 import os
 import pickle
 
+import nltk
 import spacy
 from nltk.tokenize import word_tokenize, sent_tokenize
 from rank_bm25 import BM25Okapi
@@ -50,11 +51,11 @@ def extract_knowledge_sentences(split_knowledge):
         article_indices = ['AS1', 'AS2', 'AS3', 'AS4']
 
         # Article information
-        if "AS1" in article_data:
-            for idx in article_indices:
-                sentence = article_data[idx]
-
-                knowledge_set.add(sentence)
+        # if "AS1" in article_data:
+        #     for idx in article_indices:
+        #         sentence = article_data[idx]
+        #
+        #         knowledge_set.update(sent_tokenize(sentence))
     return knowledge_set
 
 def index_knowledge(args):
@@ -68,20 +69,9 @@ def index_knowledge(args):
     )
     reading_set_files = os.listdir(data_dir)
 
-    knowledge_set = set()
-    for file_path in reading_set_files:
-        if 'hash' in file_path:
-            continue
+    knowledge_list = build_knowledge_set(data_dir, reading_set_files)
 
-        with open(os.path.join(data_dir, file_path), 'r') as reading_set_file:
-            split_knowledge = json.load(reading_set_file)
-
-        knowledge_set.update(extract_knowledge_sentences(split_knowledge))
-
-    knowledge_list = list(knowledge_set)
-    print(len(knowledge_set))
-
-    tfidf_vec = TfidfVectorizer()
+    tfidf_vec = TfidfVectorizer(tokenizer=nltk.tokenize.word_tokenize)
     tfidf_vec.fit(knowledge_list)
 
     knowledge_index = BM25Okapi(knowledge_list, tokenizer=word_tokenize)
@@ -95,6 +85,21 @@ def index_knowledge(args):
             "knowledge_list": knowledge_list
         }
         pickle.dump(index_dict, index_file)
+
+
+def build_knowledge_set(data_dir, reading_set_files):
+    knowledge_set = set()
+    for file_path in reading_set_files:
+        if 'hash' in file_path:
+            continue
+
+        with open(os.path.join(data_dir, file_path), 'r') as reading_set_file:
+            split_knowledge = json.load(reading_set_file)
+
+        knowledge_set.update(extract_knowledge_sentences(split_knowledge))
+    knowledge_list = list(knowledge_set)
+    print(len(knowledge_set))
+    return knowledge_list
 
 
 if __name__ == '__main__':
