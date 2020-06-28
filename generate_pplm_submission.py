@@ -34,13 +34,15 @@ from itertools import chain
 from operator import add
 
 import dill
+import nltk
 import torch
+from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
 from tqdm import tqdm, trange
 from transformers import GPT2Tokenizer
 
-from DA_Classifier import train
+from DA_Classifier import train, Dataset
 from gpt2 import GPT2DoubleHeadsModel, GPT2LMHeadModel
 from tc_dataset import TopicalChatsDataset
 from utils import get_dataset
@@ -64,6 +66,10 @@ PADDED_INPUTS = ["input_ids", "lm_labels", "token_type_ids"]
 
 SMALL_CONST = 1e-15
 BIG_CONST = 1e10
+
+
+PAD = Dataset.PAD
+UNK = Dataset.UNK
 
 def load_discriminator(args):
 
@@ -164,10 +170,48 @@ def get_loader(args, tokenizer):
 
     return loader, sampler
 
+def top_filtering(logits, top_k=0., top_p=0.9, threshold=-float('Inf'), filter_value=-float('Inf')):
+    """ Filter a distribution of logits using top-k, top-p (nucleus) and/or threshold filtering
+        Args:
+            logits: logits distribution shape (vocabulary size)
+            top_k: <=0: no filtering, >0: keep only top k tokens with highest probability.
+            top_p: <=0.0: no filtering, >0.0: keep only a subset S of candidates, where S is the smallest subset
+                whose total probability mass is greater than or equal to the threshold top_p.
+                In practice, we select the highest probability tokens whose cumulative probability mass exceeds
+                the threshold top_p.
+            threshold: a minimal threshold to keep logits
+    """
+    assert logits.dim() == 1  # Only work for batch size 1 for now - could update but it would obfuscate a bit the code
+    top_k = min(top_k, logits.size(-1))
+    if top_k > 0:
+        # Remove all tokens with a probability less than the last token in the top-k tokens
+        indices_to_remove = logits < torch.topk(logits, top_k)[0][..., -1, None]
+        logits[indices_to_remove] = filter_value
+
+    if top_p > 0.0:
+        # Compute cumulative probabilities of sorted tokens
+        sorted_logits, sorted_indices = torch.sort(logits, descending=True)
+        cumulative_probabilities = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
+
+        # Remove tokens with cumulative probability above the threshold
+        sorted_indices_to_remove = cumulative_probabilities > top_p
+        # Shift the indices to the right to keep also the first token above the threshold
+        sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
+        sorted_indices_to_remove[..., 0] = 0
+
+        # Back to unsorted indices and set them to -infinity
+        indices_to_remove = sorted_indices[sorted_indices_to_remove]
+        logits[indices_to_remove] = filter_value
+
+    indices_to_remove = logits < threshold
+    logits[indices_to_remove] = filter_value
+
+    return logits
 
 def perturb_past(past, model, last, unpert_past, unpert_logits, accumulated_hidden, grad_norms, stepsize, classifier,
                  classifier_fields, class_label, num_iterations, horizon_length, window_length, decay, gamma, kl_scale,
-                 device):
+                 device, tokenizer):
+    special_tokens_ids = tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS)
     grad_accumulator = [(np.zeros(p.shape).astype("float32")) for p in past]
 
     if accumulated_hidden is None:
@@ -221,8 +265,51 @@ def perturb_past(past, model, last, unpert_past, unpert_logits, accumulated_hidd
         loss_list = []
 
         # TODO:Compute loss for the current decoded sequence so far
+        curr_unpert_past = unpert_past
+        curr_probs = torch.unsqueeze(probs, dim=1)
+        wte = model.resize_token_embeddings()
 
+        current_decoded_seq = []
+        for _ in range(horizon_length):
+            inputs_embeds = torch.matmul(curr_probs, wte.weight.data)
+            logits, curr_unpert_past, curr_all_hidden = model(past=curr_unpert_past, inputs_embeds=inputs_embeds)
+            logits = logits[0, -1, :] / args.temperature
+            logits = top_filtering(logits, top_k=0, top_p=0.9)
+            probs = F.softmax(logits, dim=-1)
+            prev = torch.multinomial(probs, 1)
+
+            if prev.item() in special_tokens_ids:
+                while prev.item() in special_tokens_ids:
+                    if probs.max().item() == 1:
+                        # Disabled this rather noisy warning
+                        # logger.warn("Warning: model generating special token with probability 1.")
+                        break  # avoid infinitely looping over special token
+                    prev = torch.multinomial(probs, num_samples=1)
+            if prev.item() in special_tokens_ids:
+                break
+
+            current_decoded_seq.append(prev.item())
+
+        horizon_output = tokenizer.decode(current_decoded_seq)
+        tokens = nltk.word_tokenize(horizon_output)
+
+        if len(tokens) < 1:
+            tokens = [UNK]
+
+        conversation = [[tokens]]
+        print("Tokens: ", conversation)
+        print(classifier_fields["conversation"].process(conversation, device=device))
+        # x, conv_seq, _len, utt_len = classifier_fields["conversation"].process(conversation, device=device)
+        preds, logits = classifier(x, utt_len)
+
+        label = torch.tensor(preds.shape[0] * [class_label], device=device, dtype=torch.long)
+
+        discrim_loss = CrossEntropyLoss()(preds, label)
+        print(" PPLM discrim loss:", discrim_loss.data.cpu().numpy())
         #
+
+        loss += discrim_loss
+        loss_list.append(discrim_loss)
 
         kl_loss = 0.0
 
@@ -267,10 +354,27 @@ def perturb_past(past, model, last, unpert_past, unpert_logits, accumulated_hidd
 
         return pert_past, new_accumulated_hidden, grad_norms, loss_per_iter
 
-def generate_text_pplm(model, tokenizer, context,
-                       device, perturb, classifier, classifier_fields, class_label, length,
-                       stepsize, temperature, top_k, sample, num_iterations, grad_length, horizon_length, window_length,
-                       decay, gamma, gm_scale, kl_scale, repetition_penalty):
+def generate_text_pplm(model, tokenizer,
+                       context=None,
+                       device="cuda",
+                       perturb=True,
+                       classifier=None,
+                       classifier_fields=None,
+                       class_label=None,
+                       length=100,
+                       stepsize=0.02,
+                       temperature=1.0,
+                       top_k=10,
+                       sample=False,
+                       num_iterations=3,
+                       grad_length=10000,
+                       horizon_length=1,
+                       window_length=0,
+                       decay=False,
+                       gamma=1.5,
+                       gm_scale=0.9,
+                       kl_scale=0.01,
+                       repetition_penalty=1.0):
     past = None
     output_so_far = None
 
@@ -293,10 +397,10 @@ def generate_text_pplm(model, tokenizer, context,
 
         # Run model forward to obtain unperturbed
         if past is None and output_so_far is not None:
-            last=output_so_far[:, -1, :]
+            last = output_so_far[:, -1:]
 
             if output_so_far.shape[1] > 1:
-                _, past, _ = model(output_so_far[:, :, -1])
+                _, past, _ = model(output_so_far[:, :-1])
 
             unpert_logits, unpert_past, unpert_all_hidden = model(output_so_far)
             unpert_last_hidden = unpert_all_hidden[-1]
@@ -333,7 +437,8 @@ def generate_text_pplm(model, tokenizer, context,
                         decay=decay,
                         gamma=gamma,
                         kl_scale=kl_scale,
-                        device=device
+                        device=device,
+                        tokenizer=tokenizer
                     )
 
                     loss_in_time.append(loss_this_iter)
@@ -450,7 +555,7 @@ def run_pplm_da(args):
     discriminator, fields = load_discriminator(args)
 
     # Load GPT2 model
-    model = GPT2LMHeadModel.from_pretrained(args.model_checkpoint)
+    model = GPT2LMHeadModel.from_pretrained(args.model_checkpoint, output_hidden_states=True)
     model.to(args.device)
     model.eval()
 
@@ -467,6 +572,7 @@ def run_pplm_da(args):
 
         for j in range(len(input_ids)):
             input_seq = tokenizer.decode(input_ids[j][0])
+            print(input_seq)
             prefix, suffix = input_seq.rsplit("<speaker", maxsplit=1)
             context = prefix + "<speaker" + suffix[:2]  # Hacky way to append the speaker tag
 
