@@ -54,8 +54,10 @@ def extract_knowledge_sentences(split_knowledge):
         # if "AS1" in article_data:
         #     for idx in article_indices:
         #         sentence = article_data[idx]
-        #
-        #         knowledge_set.update(sent_tokenize(sentence))
+        #         for sent in sent_tokenize(sentence):
+        #             if len(word_tokenize(sent)) < 5:
+        #                 continue
+        #             knowledge_set.add(sent)
     return knowledge_set
 
 def index_knowledge(args):

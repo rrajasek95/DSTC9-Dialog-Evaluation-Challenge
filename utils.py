@@ -1,8 +1,11 @@
 import json
 import logging
 import os
+import pickle
 
 import torch
+from sklearn.metrics.pairwise import linear_kernel
+from tqdm import tqdm
 from transformers import GPT2Tokenizer
 
 CONFIG_NAME = 'config.json'
@@ -49,25 +52,52 @@ def get_dataset(tokenizer, dataset_path, dataset_cache):
     return dataset
 
 
-def process_split(dataset_path, split, tokenizer):
+def process_split(dataset_path, split, tokenizer, index):
+    vec, knowledge_sentences, tfidf_vecs = index
     path_prefix = os.path.join(dataset_path, split)
 
     data = []
     with open(path_prefix + '_full_anno.json', 'r') as annotated_split_file:
         annotated_data = json.load(annotated_split_file)
-        for conv_id, conv_data in annotated_data.items():
+        for conv_id, conv_data in tqdm(annotated_data.items()):
             context = []
             for turn in conv_data["content"]:
-                current_turn_data = (tokenizer.encode(turn["message"]), turn["mezza_da"])
+                # This is a highly approximate heuristic.
+                # Both Gopalakrishnan et al. 2019 and Hedayatnia et al. 2020
+                # acknowledge they don't have anything better for this issue
+                response = turn["message"]
+
+                for segment in turn["segments"]:
+                    sentence = segment["text"]
+                    sentence_vec = vec.transform([sentence])
+                    similarities = linear_kernel(tfidf_vecs, sentence_vec).flatten()
+                    closest_knowledge_index = similarities.argsort()[-1]
+
+                    if similarities[closest_knowledge_index] > 0.3:
+                        knowledge_sentence = knowledge_sentences[closest_knowledge_index]
+                        break
+                else:
+                    response_vec = vec.transform([response])
+                    similarities = linear_kernel(tfidf_vecs, response_vec).flatten()
+                    closest_knowledge_index = similarities.argsort()[-1]
+
+                    knowledge_sentence = knowledge_sentences[closest_knowledge_index] \
+                        if similarities[closest_knowledge_index] > 0.3 else ""
+
+                current_turn_data = (tokenizer.encode(response), turn["mezza_da"], tokenizer.encode(knowledge_sentence))
                 data.append((context, current_turn_data))
                 context = context + [current_turn_data]
 
     return data
 
 
-def augmented_tc_dataset(tokenizer, dataset_path, dataset_cache):
+def augmented_tc_dataset(tokenizer, dataset_path, dataset_cache, knowledge_index_path):
     dataset_cache = dataset_cache + '_augmented_' + type(tokenizer).__name__
-
+    with open(knowledge_index_path, 'rb') as knowledge_index_file:
+        index_data = pickle.load(knowledge_index_file)
+    vec = index_data["tfidf_vec"]
+    knowledge_sentences = index_data["knowledge_list"]
+    tfidf_vecs = vec.transform(knowledge_sentences)
     if dataset_cache and os.path.isfile(dataset_cache):
         logger.info("Load tokenized dataset from cache at %s", dataset_cache)
         dataset = torch.load(dataset_cache)
@@ -79,7 +109,7 @@ def augmented_tc_dataset(tokenizer, dataset_path, dataset_cache):
         dataset = {}
         for split in splits:
 
-            dataset[split] = process_split(dataset_path, split, tokenizer)
+            dataset[split] = process_split(dataset_path, split, tokenizer, (vec, knowledge_sentences, tfidf_vecs))
             logger.info("Processed split %s", split)
         torch.save(dataset, dataset_cache)
 

@@ -55,10 +55,10 @@ TRAINING_CONFIG_TOKENS = {
     },
 
     "kd-pd-nrg": {
-        "additional_tokens": ADDITIONAL_TOKENS + [NO_DIALOGUE_ACT, THANKING, DIRECTIVE,
-                             COMMISSIVE, APOLOGY, CHOICE_Q, SET_Q,
-                             SALUTATION, PROP_Q, STATEMENT,
-                             FEEDBACK, "_fact"],
+        "additional_tokens": ADDITIONAL_TOKENS + [f"<{dact}>" for dact in [NO_DIALOGUE_ACT, THANKING, DIRECTIVE,
+                                                                           COMMISSIVE, APOLOGY, CHOICE_Q, SET_Q,
+                                                                           SALUTATION, PROP_Q, STATEMENT,
+                                                                           FEEDBACK]] + ["_fact"],
         "special_tokens": SPECIAL_TOKENS
     }
 }
@@ -211,7 +211,7 @@ def get_data_loaders_optimized(args, tokenizer):
         topical_chat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache)
         train_dataset, valid_dataset = TopicalChatsDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), TopicalChatsDataset(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS, args)
     else:
-        topical_chat = augmented_tc_dataset(tokenizer, args.dataset_path, args.dataset_cache)
+        topical_chat = augmented_tc_dataset(tokenizer, args.dataset_path, args.dataset_cache, args.knowledge_index_path)
         train_dataset, valid_dataset = TopicalChatsKDDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), TopicalChatsKDDataset(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS, args)
 
     train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset) if args.distributed else None

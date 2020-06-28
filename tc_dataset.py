@@ -80,6 +80,7 @@ class TopicalChatsDataset(Dataset):
 
         instance = {}
         instance["input_ids"] = list(chain(*sequence))
+        print(self.tokenizer.decode(instance["input_ids"]))
         instance["token_type_ids"] = [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence) for _ in s]
         instance["mc_token_ids"] = len(instance["input_ids"]) - 1
 
@@ -116,68 +117,41 @@ class TopicalChatsKDDataset(TopicalChatsDataset):
     def sample_candidates(self, dataset, current_conversation_index):
         # Lets just hope that the number of cases where the true responses gets included in the
         # candidates is vanishingly small
-        candidates = [response for (_, (response, _)) in random.sample(dataset, self.num_candidates - 1)]
+        candidates = [response for (_, (response, _, _)) in random.sample(dataset, self.num_candidates - 1)]
 
         return candidates
-
-    def _retrieve_relevant_knowledge(self, context):
-        if len(context) == 0:
-            return ""
-        else:
-            response = context[-1]
-            past_turn = self.tokenizer.decode(response)
-            closest_knowledge = self.knowledge_retriever.get_top_n(past_turn, self.knowledge_sentences)
-            items = [past_turn] + closest_knowledge
-
-            vectors = self.tfidf_vec.transform(items)
-            similarities = linear_kernel(vectors[1:], vectors[0]).flatten()
-            closest_index = similarities.argsort()[-1]
-
-            return closest_knowledge[closest_index] if similarities[closest_index] < 0.2 else ""
 
     def _construct_dialog_state(self, history):
         turn_history = []
         da_history = []
-        knowledge_history = []
 
-        for (response, das) in history:
+        for (response, das, _) in history:
             turn_history.append(response)
 
             da_history += das
 
-        fact = self._retrieve_relevant_knowledge(turn_history)
-        if len(turn_history) > 1:
-            past_fact = self._retrieve_relevant_knowledge(turn_history[:-1])
-            knowledge_history.append(past_fact)
-
         dialog_state = {
             "turn_history": turn_history,
-            "knowledge_history": knowledge_history,
-            "da_history": da_history,
-            "knowledge": fact
+            "da_history": da_history
         }
 
         return dialog_state
 
     def __getitem__(self, index):
-        (history, (response, mezza_das)) = self.dataset[index]
+        (history, (response, mezza_das, knowledge)) = self.dataset[index]
 
         dialog_state = self._construct_dialog_state(history)
-        print(dialog_state)
-        action, knowledge = self.dialog_policy.get_knowledge_grounded_action(dialog_state)
-
-        uses_fact = self.tokenizer.encode("_nofact" if knowledge == "" else "_fact")
-
-        tokenized_knowledge = self.tokenizer.encode(knowledge)
-        history, fact = self.truncate_sequences(dialog_state["turn_history"], tokenized_knowledge)
+        history, fact = self.truncate_sequences(dialog_state["turn_history"], knowledge)
 
         candidates = self.sample_candidates(self.dataset, index)
         candidates.append(response)
-
-        encoded_das = self.tokenizer.encode(action)
+        encoded_das = self.tokenizer.encode([f"<{da['da']}>" for da in mezza_das])
         instances = []
 
-        action_plan = fact + encoded_das + uses_fact
+        # The action plan must be ground-truth for training and validation
+        # However, for inference time, it must follow the policy
+        uses_fact = self.tokenizer.encode("_nofact" if len(knowledge) == 0 else "_fact")
+        action_plan = encoded_das + fact + uses_fact
         for j, candidate in enumerate(candidates):
             lm_labels = bool(j == self.num_candidates - 1)
             instance = self.build_input_from_segments(history, candidate, action_plan, self.tokenizer, lm_labels)
