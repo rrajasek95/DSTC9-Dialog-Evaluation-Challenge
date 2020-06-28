@@ -188,7 +188,8 @@ def get_loader(args, tokenizer):
 
 def generate_submissions(args):
 
-    tokenizer_class = GPT2Tokenizer if "gpt2" in args.model_checkpoint else OpenAIGPTTokenizer
+    tokenizer_class = GPT2Tokenizer
+
     tokenizer = tokenizer_class.from_pretrained(args.model_metadata_path)
 
     model_class = GPT2DoubleHeadsModel if "gpt2" in args.model_checkpoint else OpenAIGPTDoubleHeadsModel
