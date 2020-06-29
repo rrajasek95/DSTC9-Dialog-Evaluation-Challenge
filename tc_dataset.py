@@ -80,7 +80,6 @@ class TopicalChatsDataset(Dataset):
 
         instance = {}
         instance["input_ids"] = list(chain(*sequence))
-        print(self.tokenizer.decode(instance["input_ids"]))
         instance["token_type_ids"] = [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence) for _ in s]
         instance["mc_token_ids"] = len(instance["input_ids"]) - 1
 
