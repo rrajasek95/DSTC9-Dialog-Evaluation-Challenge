@@ -7,7 +7,6 @@ import os
 import pickle
 
 import nltk
-import spacy
 from nltk.tokenize import word_tokenize, sent_tokenize
 from rank_bm25 import BM25Okapi
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -61,8 +60,6 @@ def extract_knowledge_sentences(split_knowledge):
     return knowledge_set
 
 def index_knowledge(args):
-    nlp = spacy.load('en_core_web_lg')
-
     data_dir = os.path.join(
         args.data_dir,
         'alexa-prize-topical-chat-dataset',
