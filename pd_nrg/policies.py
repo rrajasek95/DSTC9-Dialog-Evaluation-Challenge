@@ -16,6 +16,38 @@ STATEMENT = "Statement"
 FEEDBACK = "Feedback"
 
 
+STATEMENT_NON_OPINION = "Statement-non-opinion"
+STATEMENT_OPINION = "Statement-opinion"
+YES_NO_QUESTION = "Yes-No-Question"
+APPRECIATION = "Appreciation"
+WH_QUESTION = "Wh-Question"
+CONVENTIONAL_CLOSING = "Conventional-closing"
+OPEN_QUESTION = "Open-Question"
+CONVENTIONAL_OPENING = "Conventional-opening"
+DECLARATIVE_WH_QUESTION = "Declarative Wh-Question"
+AGREE_ACCEPT = "Agree/Accept"
+ACTION_DIRECTIVE = "Action-directive"
+BACKCHANNEL_IN_QUESTION_FORM = "Backchannel in question form"
+SIGNAL_NON_UNDERSTANDING = "Signal-non-understanding"
+HEDGE = "HEDGE"
+DECLARATIVE_YES_NO_QUESTION = "Declarative Yes-No-Question"
+NEGATIVE_NON_NO_ANSWERS = "Negative non-no answers"
+OR_CLAUSE = "Or-Clause"
+OFFERS = "Offers, Options, Commits"
+MAYBE_ACCEPT_PART = "Maybe/Accept-part"
+AFFIRMATIVE_NON_YES_ANSWERS = "Affirmative non-yes answers"
+REJECT = "Reject"
+OTHER_ANSWERS = "Other answers"
+SUMMARIZE = "Summarize/reformulate"
+YES_ANSWERS = "Yes answers"
+DOWNPLAYER = "Downplayer"
+RHETORICAL_QUESTIONS = "Rhetorical-QUestions"
+HOLD_BEFORE_ANSWER = "Hold before answer/agreement"
+ACKNOWLEDGE = "Acknowledge"
+NO_ANSWERS = "No answers"
+
+
+
 class DialogPolicy(object):
     """
     DialogPolicy

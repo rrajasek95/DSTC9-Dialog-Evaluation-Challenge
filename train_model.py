@@ -42,6 +42,14 @@ from pd_nrg.policies import (NO_DIALOGUE_ACT, THANKING, DIRECTIVE,
                              SALUTATION, PROP_Q, STATEMENT,
                              FEEDBACK)
 
+from pd_nrg.policies import (STATEMENT_NON_OPINION, STATEMENT_OPINION, YES_NO_QUESTION, APPRECIATION,
+                             WH_QUESTION, CONVENTIONAL_CLOSING, OPEN_QUESTION, CONVENTIONAL_OPENING,
+                             DECLARATIVE_WH_QUESTION, AGREE_ACCEPT, ACTION_DIRECTIVE, BACKCHANNEL_IN_QUESTION_FORM,
+                             SIGNAL_NON_UNDERSTANDING, HEDGE, DECLARATIVE_YES_NO_QUESTION, NEGATIVE_NON_NO_ANSWERS,
+                             OR_CLAUSE, OFFERS, MAYBE_ACCEPT_PART, AFFIRMATIVE_NON_YES_ANSWERS, REJECT,
+                             OTHER_ANSWERS, SUMMARIZE, YES_ANSWERS, DOWNPLAYER, RHETORICAL_QUESTIONS,
+                             HOLD_BEFORE_ANSWER, ACKNOWLEDGE, NO_ANSWERS)
+
 logger = logging.getLogger(__file__)
 
 # The _nofact token needs to be added
@@ -60,7 +68,27 @@ TRAINING_CONFIG_TOKENS = {
                                                                            SALUTATION, PROP_Q, STATEMENT,
                                                                            FEEDBACK]] + ["_fact"],
         "special_tokens": SPECIAL_TOKENS
+    },
+
+    "kd-pd-nrg-swbd": {
+        "additional_tokens": ADDITIONAL_TOKENS + [f"<{dact}>" for dact in [NO_DIALOGUE_ACT, APOLOGY,
+                                                                           STATEMENT_NON_OPINION, STATEMENT_OPINION,
+                                                                           YES_NO_QUESTION, APPRECIATION, WH_QUESTION,
+                                                                           CONVENTIONAL_CLOSING, OPEN_QUESTION,
+                                                                           CONVENTIONAL_OPENING, DECLARATIVE_WH_QUESTION,
+                                                                           AGREE_ACCEPT, ACTION_DIRECTIVE,
+                                                                           BACKCHANNEL_IN_QUESTION_FORM,
+                                                                           SIGNAL_NON_UNDERSTANDING, HEDGE,
+                                                                           DECLARATIVE_YES_NO_QUESTION,
+                                                                           NEGATIVE_NON_NO_ANSWERS, OR_CLAUSE, OFFERS,
+                                                                           MAYBE_ACCEPT_PART, AFFIRMATIVE_NON_YES_ANSWERS,
+                                                                           REJECT, OTHER_ANSWERS, SUMMARIZE, YES_ANSWERS,
+                                                                           DOWNPLAYER, RHETORICAL_QUESTIONS,
+                                                                           HOLD_BEFORE_ANSWER, ACKNOWLEDGE,
+                                                                           NO_ANSWERS]] + ["_fact"],
+        "special_tokens": SPECIAL_TOKENS
     }
+
 }
 
 ATTR_TO_SPECIAL_TOKEN = {
@@ -360,7 +388,7 @@ def train():
                         help="Path or url of the dataset. If empty download from S3.")
     parser.add_argument('--training_configuration', type=str, default="baseline",
                         help="Training configuration to run",
-                        choices=["baseline", "kd-pd-nrg"])
+                        choices=["baseline", "kd-pd-nrg", "kd-pd-nrg-swbd"])
     parser.add_argument('--knowledge_index_path', type=str, default="./tc_processed/knowledge_index.pkl",
                         help="Path to knowledge index file")
     parser.add_argument("--dataset_cache", type=str, default='./dataset_cache', help="Path or url of the dataset cache")
