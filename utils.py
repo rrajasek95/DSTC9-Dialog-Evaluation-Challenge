@@ -125,8 +125,24 @@ class GlobalStepCounter(object):
     def step(self):
         self.num_steps += 1
 
+def generate_references_for_split(dataset_path, dataset_cache, split, output_path):
+    path_prefix = os.path.join(dataset_path, split)
+    responses = []
+    with open(path_prefix + '_full_anno.json', 'r') as annotated_split_file:
+        annotated_data = json.load(annotated_split_file)
+        for conv_id, conv_data in tqdm(annotated_data.items()):
+            for turn in conv_data["content"]:
+                text = turn["message"]
+                if text:
+                    responses.append(text.strip() + "\n")
+
+    with open(output_path, 'w') as references_file:
+        references_file.writelines(responses[:-1])
+
+
 if __name__ == '__main__':
     pass
+    # generate_references_for_split('tc_processed', None, 'valid_freq', 'tc_processed/valid_freq.tgt')
     # tokenizer = GPT2Tokenizer.from_pretrained('gpt2-large')
     # dataset_path = 'processed_output'
     # dataset_cache = './dataset_cache'
