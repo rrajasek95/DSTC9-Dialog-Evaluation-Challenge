@@ -53,7 +53,7 @@ def get_dataset(tokenizer, dataset_path, dataset_cache):
 
 
 def process_split(dataset_path, split, tokenizer, index):
-    vec, knowledge_sentences, tfidf_vecs = index
+    vec, knowledge_sentences, tfidf_vecs, dialog_act = index
     path_prefix = os.path.join(dataset_path, split)
 
     data = []
@@ -84,14 +84,14 @@ def process_split(dataset_path, split, tokenizer, index):
                     knowledge_sentence = knowledge_sentences[closest_knowledge_index] \
                         if similarities[closest_knowledge_index] > 0.3 else ""
 
-                current_turn_data = (tokenizer.encode(response), turn["mezza_da"], tokenizer.encode(knowledge_sentence))
+                current_turn_data = (tokenizer.encode(response), turn[dialog_act], tokenizer.encode(knowledge_sentence))
                 data.append((context, current_turn_data))
                 context = context + [current_turn_data]
 
     return data
 
 
-def augmented_tc_dataset(tokenizer, dataset_path, dataset_cache, knowledge_index_path):
+def augmented_tc_dataset(tokenizer, dataset_path, dataset_cache, knowledge_index_path, dialog_act):
     dataset_cache = dataset_cache + '_augmented_' + type(tokenizer).__name__
     with open(knowledge_index_path, 'rb') as knowledge_index_file:
         index_data = pickle.load(knowledge_index_file)
@@ -109,7 +109,7 @@ def augmented_tc_dataset(tokenizer, dataset_path, dataset_cache, knowledge_index
         dataset = {}
         for split in splits:
 
-            dataset[split] = process_split(dataset_path, split, tokenizer, (vec, knowledge_sentences, tfidf_vecs))
+            dataset[split] = process_split(dataset_path, split, tokenizer, (vec, knowledge_sentences, tfidf_vecs, dialog_act))
             logger.info("Processed split %s", split)
         torch.save(dataset, dataset_cache)
 
