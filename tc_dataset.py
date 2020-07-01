@@ -175,7 +175,6 @@ class TopicalChatsKDDataset(TopicalChatsDataset):
         if self.inference:
             mezza_das, knowledge = self._execute_heuristic_policy(dialog_state)
             mezza_das = [{"da": da} for da in mezza_das]
-            print(knowledge)
         history, fact = self.truncate_sequences(dialog_state["turn_history"], knowledge)
 
         candidates = self.sample_candidates(self.dataset, index)
