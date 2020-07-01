@@ -179,7 +179,7 @@ class TopicalChatsKDDataset(TopicalChatsDataset):
 
         candidates = self.sample_candidates(self.dataset, index)
         candidates.append(response)
-        encoded_das = self.tokenizer.encode([f"<{da['da']}>" for da in mezza_das])
+        encoded_das = self.tokenizer.encode([f"<{da['label']}>" for da in mezza_das])
         instances = []
 
         # The action plan must be ground-truth for training and validation

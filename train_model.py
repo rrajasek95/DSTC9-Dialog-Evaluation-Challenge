@@ -48,7 +48,9 @@ from pd_nrg.policies import (STATEMENT_NON_OPINION, STATEMENT_OPINION, YES_NO_QU
                              SIGNAL_NON_UNDERSTANDING, HEDGE, DECLARATIVE_YES_NO_QUESTION, NEGATIVE_NON_NO_ANSWERS,
                              OR_CLAUSE, OFFERS, MAYBE_ACCEPT_PART, AFFIRMATIVE_NON_YES_ANSWERS, REJECT,
                              OTHER_ANSWERS, SUMMARIZE, YES_ANSWERS, DOWNPLAYER, RHETORICAL_QUESTIONS,
-                             HOLD_BEFORE_ANSWER, ACKNOWLEDGE, NO_ANSWERS)
+                             HOLD_BEFORE_ANSWER, ACKNOWLEDGE, NO_ANSWERS, OTHER, NON_VERBAL, UNINTERPRETABLE,
+                             TAG_QUESTION, EQUAL_PLUX, COLLABORATIVE_COMPLETION, THIRD_PARTY_TALK, REPEAT_PHRASE,
+                             SELF_TALK, RESPONSE_ACKNOWLEDGE, QUOTATION, ABANDONED_OR_TURN_EXIT, DISPREFRRED_ANSWERS)
 
 logger = logging.getLogger(__file__)
 
@@ -84,7 +86,11 @@ TRAINING_CONFIG_TOKENS = {
                                                                            MAYBE_ACCEPT_PART, AFFIRMATIVE_NON_YES_ANSWERS,
                                                                            REJECT, OTHER_ANSWERS, SUMMARIZE, YES_ANSWERS,
                                                                            DOWNPLAYER, RHETORICAL_QUESTIONS,
-                                                                           HOLD_BEFORE_ANSWER, ACKNOWLEDGE,
+                                                                           HOLD_BEFORE_ANSWER, ACKNOWLEDGE, OTHER, NON_VERBAL,
+                                                                           UNINTERPRETABLE, TAG_QUESTION, EQUAL_PLUX,
+                                                                           COLLABORATIVE_COMPLETION, THIRD_PARTY_TALK,
+                                                                           REPEAT_PHRASE, SELF_TALK, RESPONSE_ACKNOWLEDGE,
+                                                                           QUOTATION, ABANDONED_OR_TURN_EXIT, DISPREFRRED_ANSWERS,
                                                                            NO_ANSWERS]] + ["_fact"],
         "special_tokens": SPECIAL_TOKENS
     }
@@ -336,7 +342,7 @@ def run_evaluation(model, val_loader, tokenizer, writer, args):
             # [batch_size]
             # [batch_size, num_cands, seq_len]
             input_ids, mc_token_ids, lm_labels, mc_labels, token_type_ids = batch
-            # logger.info(tokenizer.decode(input_ids[0, -1, :].tolist()))
+            logger.info(tokenizer.decode(input_ids[0, -1, :].tolist()))
             # if we dont send labels to model, it doesnt return losses
             lm_logits, mc_logits, *_ = model(
                 input_ids, token_type_ids=token_type_ids, mc_token_ids=mc_token_ids,
@@ -394,7 +400,7 @@ def train():
                         choices=["baseline", "kd-pd-nrg", "kd-pd-nrg-swbd"])
     parser.add_argument('--knowledge_index_path', type=str, default="./tc_processed/knowledge_index.pkl",
                         help="Path to knowledge index file")
-    parser.add_argument("--dataset_cache", type=str, default='./dataset_cache', help="Path or url of the dataset cache")
+    parser.add_argument("--dataset_cache", type=str, default='./dataset_caches', help="Path or url of the dataset cache")
     parser.add_argument("--model_checkpoint", type=str, default="gpt2-medium",
                         help="Path, url or short name of the model")
     parser.add_argument("--num_candidates", type=int, default=2, help="Number of candidates for training")
@@ -407,7 +413,7 @@ def train():
     parser.add_argument("--lm_coef", type=float, default=1.0, help="LM loss coefficient")
     parser.add_argument("--mc_coef", type=float, default=1.0, help="Multiple-choice loss coefficient")
     parser.add_argument("--max_norm", type=float, default=1.0, help="Clipping gradient norm")
-    parser.add_argument("--n_epochs", type=int, default=3, help="Number of training epochs")
+    parser.add_argument("--n_epochs", type=int, default=0, help="Number of training epochs")
     # parser.add_argument("--personality_permutations", type=int, default=1,
     #                     help="Number of permutations of personality sentences")
 
@@ -489,6 +495,7 @@ def train():
     save_model_config(model, tokenizer, args)
     # save_model(model, 'test_checkpoint', args)
     run_training(model, optimizer, scheduler, loaders, tokenizer, writer, args)
+
 
 if __name__ == '__main__':
     train()
