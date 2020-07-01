@@ -106,11 +106,15 @@ class TopicalChatsKDDataset(TopicalChatsDataset):
         self.knowledge_retriever = index_data["bm25_index"]
         self.tfidf_vec = index_data["tfidf_vec"]
         self.knowledge_sentences = index_data["knowledge_list"]
+        self.vectorized_sentences = self.tfidf_vec.transform(self.knowledge_sentences)
 
 
-    def __init__(self, dataset, tokenizer, special_tokens, args):
+    def __init__(self, dataset, tokenizer, special_tokens, args, inference=False):
         self.dialog_policy = KnowledgeDependent()
         self._init_knowledge_index(args.knowledge_index_path)
+        # For inference, the model will start executing the
+        # heuristic dialog policy and knowledge selection policy
+        self.inference = inference
         super().__init__(dataset, tokenizer, special_tokens, args)
 
     def sample_candidates(self, dataset, current_conversation_index):
@@ -123,28 +127,59 @@ class TopicalChatsKDDataset(TopicalChatsDataset):
     def _construct_dialog_state(self, history):
         turn_history = []
         da_history = []
-
-        for (response, das, _) in history:
+        knowledge_history = []
+        for (response, das, past_knowledge) in history:
             turn_history.append(response)
-
             da_history += das
+            if self.inference:
+                # Knowledge history only matters during inference
+                # this also optimizes running an unnecessary decode
+                # during training
+                knowledge_history.append(self.tokenizer.decode(past_knowledge))
 
         dialog_state = {
             "turn_history": turn_history,
-            "da_history": da_history
+            "da_history": da_history,
+            "knowledge_history": knowledge_history
         }
 
         return dialog_state
 
+    def _select_appropriate_knowledge(self, dialog_state):
+        turn_history = dialog_state["turn_history"]
+        if len(turn_history) == 0:
+            return ""
+        else:
+            last_turn = self.tokenizer.decode(turn_history[-1])
+            # closest_sentences = self.knowledge_retriever.get_top_n(last_turn, self.knowledge_sentences)
+            tfidf_vecs = self.tfidf_vec.transform([last_turn])
+            similarities = linear_kernel(self.vectorized_sentences, tfidf_vecs[0]).flatten()
+
+            closest_knowledge_index = similarities.argsort()[-1]
+            if similarities[closest_knowledge_index] > 0.25:
+                return self.knowledge_sentences[closest_knowledge_index]
+            else:
+                return ""
+        pass
+
+    def _execute_heuristic_policy(self, dialog_state):
+        knowledge = self._select_appropriate_knowledge(dialog_state)
+        dialog_state["knowledge"] = knowledge  # Augment dialog state with knowledge
+        das, knowledge = self.dialog_policy.get_knowledge_grounded_action(dialog_state)
+        return das, self.tokenizer.encode(knowledge)
+
     def __getitem__(self, index):
-        (history, (response, dialog_acts, knowledge)) = self.dataset[index]
+        (history, (response, mezza_das, knowledge)) = self.dataset[index]
 
         dialog_state = self._construct_dialog_state(history)
+        if self.inference:
+            mezza_das, knowledge = self._execute_heuristic_policy(dialog_state)
+            mezza_das = [{"da": da} for da in mezza_das]
         history, fact = self.truncate_sequences(dialog_state["turn_history"], knowledge)
 
         candidates = self.sample_candidates(self.dataset, index)
         candidates.append(response)
-        encoded_das = self.tokenizer.encode([f"<{da['da']}>" for da in dialog_acts])
+        encoded_das = self.tokenizer.encode([f"<{da['da']}>" for da in mezza_das])
         instances = []
 
         # The action plan must be ground-truth for training and validation

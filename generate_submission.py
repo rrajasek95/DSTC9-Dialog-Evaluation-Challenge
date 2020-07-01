@@ -10,8 +10,8 @@ from tqdm.auto import tqdm
 from transformers import OpenAIGPTTokenizer, GPT2Tokenizer, OpenAIGPTDoubleHeadsModel
 
 from gpt2 import GPT2DoubleHeadsModel
-from tc_dataset import TopicalChatsDataset
-from utils import get_dataset
+from tc_dataset import TopicalChatsDataset, TopicalChatsKDDataset
+from utils import get_dataset, augmented_tc_dataset
 import torch.nn.functional as F
 
 """
@@ -171,14 +171,21 @@ def collate_batch_elements(batch, tokenizer, args):
     return tensorized_input
 
 def get_loader(args, tokenizer):
-    topical_chat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache)
-
+    if args.training_configuration == "baseline":
+        topical_chat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache)
+    else:
+        topical_chat = augmented_tc_dataset(tokenizer, args.dataset_path, args.dataset_cache, args.knowledge_index_path)
     splits = list(topical_chat.keys())
     for split in splits:
         if split != args.split:
             del topical_chat[split]
         # Free up memory from unneeded splits
-    dataset = TopicalChatsDataset(topical_chat[args.split], tokenizer, SPECIAL_TOKENS, args)
+    if args.training_configuration == "baseline":
+        dataset = TopicalChatsDataset(topical_chat[args.split], tokenizer, SPECIAL_TOKENS, args)
+    else:
+        dataset = TopicalChatsKDDataset(topical_chat[args.split], tokenizer, SPECIAL_TOKENS, args,
+                                        inference=True)  # Enable heuristic dialog policy
+
     sampler = torch.utils.data.distributed.DistributedSampler(dataset) if args.distributed else None
     loader = DataLoader(dataset, sampler=sampler, batch_size=args.valid_batch_size,
                               collate_fn=lambda x: collate_batch_elements(x, tokenizer, args),
@@ -214,6 +221,10 @@ def generate_submissions(args):
             outputs += decode_sequences(input_ids, token_type_ids, model, tokenizer, args)
 
             if i % args.log_every_n == 0:
+                input_seq = tokenizer.decode(input_ids[0][0])
+                prefix, suffix = input_seq.rsplit("<speaker", maxsplit=1)
+                context = prefix + "<speaker" + suffix[:2]  # Hacky way to append the speaker tag
+                logger.info(f"Context: {context}")
                 logger.info(f"Sample output: {outputs[i*args.valid_batch_size]}")  # Log first sentence of that batch
 
     with open(args.output_file_path, 'w') as output_file:
@@ -227,6 +238,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset_path", type=str, default="processed_output",
                         help="Path or url of the dataset. If empty download from S3.")
+    parser.add_argument('--training_configuration', type=str, default="baseline",
+                        help="Training configuration to run",
+                        choices=["baseline", "kd-pd-nrg", "kd-pd-nrg-swbd"])
+    parser.add_argument('--knowledge_index_path', type=str, default="./tc_processed/knowledge_index.pkl",
+                        help="Path to knowledge index file")
     parser.add_argument('--model_checkpoint', type=str, default="runs/topical_chats_gpt2/",
                         help="Path, url or short name of the model")
     parser.add_argument("--split", type=str,
