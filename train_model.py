@@ -238,8 +238,11 @@ def get_data_loaders_optimized(args, tokenizer):
     if args.training_configuration == "baseline":
         topical_chat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache)
         train_dataset, valid_dataset = TopicalChatsDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), TopicalChatsDataset(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS, args)
+    elif args.training_configuration == "kd-pd-nrg-swbd":
+        topical_chat = augmented_tc_dataset(tokenizer, args.dataset_path, args.dataset_cache, args.knowledge_index_path, "switchboard_da")
+        train_dataset, valid_dataset = TopicalChatsKDDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), TopicalChatsKDDataset(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS, args)
     else:
-        topical_chat = augmented_tc_dataset(tokenizer, args.dataset_path, args.dataset_cache, args.knowledge_index_path)
+        topical_chat = augmented_tc_dataset(tokenizer, args.dataset_path, args.dataset_cache, args.knowledge_index_path, "mezza_da")
         train_dataset, valid_dataset = TopicalChatsKDDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), TopicalChatsKDDataset(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS, args)
 
     train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset) if args.distributed else None

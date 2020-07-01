@@ -137,14 +137,14 @@ class TopicalChatsKDDataset(TopicalChatsDataset):
         return dialog_state
 
     def __getitem__(self, index):
-        (history, (response, mezza_das, knowledge)) = self.dataset[index]
+        (history, (response, dialog_acts, knowledge)) = self.dataset[index]
 
         dialog_state = self._construct_dialog_state(history)
         history, fact = self.truncate_sequences(dialog_state["turn_history"], knowledge)
 
         candidates = self.sample_candidates(self.dataset, index)
         candidates.append(response)
-        encoded_das = self.tokenizer.encode([f"<{da['da']}>" for da in mezza_das])
+        encoded_das = self.tokenizer.encode([f"<{da['da']}>" for da in dialog_acts])
         instances = []
 
         # The action plan must be ground-truth for training and validation
