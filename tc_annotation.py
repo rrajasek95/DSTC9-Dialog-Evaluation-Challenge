@@ -2,10 +2,10 @@ import argparse
 import json
 import os
 
+import more_itertools
 import spacy
 from flair.data import Sentence
 from flair.models import SequenceTagger
-
 from tqdm.auto import tqdm
 
 from annotators.spotlight import SpotlightTagger
@@ -262,13 +262,53 @@ def merge_all_annotations(args):
             json.dump(merged_split, merged_anno_file)
 
 
+def partition_training_conversations(data_dir, num_splits=16):
+    train_file = os.path.join(
+        data_dir,
+        'processed_output',
+        'train.src'
+    )
+
+    with open(train_file, 'r') as train_data_file:
+
+        conversations = []
+        current_conversation = []
+        prev_num_turns = 0
+        for line in train_data_file:
+            turns = line.strip().split("_eos")[:-1]
+
+            num_turns = len(turns)
+
+            if num_turns <= prev_num_turns:
+
+                conversations.append(current_conversation)
+                current_conversation = []
+
+            current_conversation.append(line)
+            prev_num_turns = num_turns
+
+        chunks = more_itertools.divide(num_splits, conversations)
+
+        for i, chunk in enumerate(chunks):
+            file_path = os.path.join(
+                data_dir,
+                'processed_output',
+                f'train_{i + 1}.src'
+            )
+            with open(file_path, 'w') as split_file:
+                conversations = list(chunk)
+                for lines in conversations:
+                    split_file.writelines(lines)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_dir', type=str, default='./',
                         help='Base directory for the data')
 
     args = parser.parse_args()
-    merge_all_annotations(args)
+    partition_training_conversations(args.data_dir)
+    # merge_all_annotations(args)
     # perform_vader_annotation(args)
 
     # perform_spotlight_anno(args)
