@@ -5,10 +5,12 @@ such as F1, BLEU-4, ROUGE-L, METEOR, etc. to be computed
 against a set of reference responses.
 """
 import argparse
+import pprint
 from collections import Counter
 
 import nlp
 import nltk
+import nlgeval
 from nltk import meteor
 
 class ReferenceMetric(object):
@@ -158,6 +160,29 @@ class CorpusNGramDiversity(ReferenceFreeMetric):
     def __repr__(self):
         return f'Corpus {self.n}-gram diversity'
 
+class NLGEval(ReferenceFreeMetric):
+    """
+    Runs the full NLGEval pipeline which computes multiple machine translation
+    metrics:
+    1. BLEU
+    2. METEOR
+    3. ROUGE
+    3. CIDEr
+    4. Skip Thought
+    5. Embedding Average
+    6. Vector Extrema
+    7. Greedy matching
+    """
+
+    def __init__(self, hypothesis_file, reference_file):
+        self.metrics_dict = nlgeval.compute_metrics(hypothesis=hypothesis_file,
+                                                    references=[reference_file], no_skipthoughts=True, no_glove=True)
+    def __repr__(self):
+        return 'NLGEval metrics:'
+
+    def compute(self, hypotheses):
+        return pprint.pformat(self.metrics_dict)
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
@@ -195,7 +220,8 @@ if __name__ == '__main__':
         NGramDiversity(n=1),
         NGramDiversity(n=2),
         CorpusNGramDiversity(n=1),
-        CorpusNGramDiversity(n=2)
+        CorpusNGramDiversity(n=2),
+        NLGEval(args.predictions_file, args.references_file)
     ]
 
     print(f"Number of examples n={len(predictions)}\n")
