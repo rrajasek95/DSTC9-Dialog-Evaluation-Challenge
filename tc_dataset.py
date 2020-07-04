@@ -27,12 +27,11 @@ class TopicalChatsDataset(Dataset):
         self.max_fact_length = args.max_fact_length
 
     def __getitem__(self, index):
-        (history, response, fact) = self.dataset[index]
+        # For the baseline implementation, we don't need to consider the DA
+        (history, (response, _, fact)) = self.dataset[index]
 
-        # Truncate history turns to reduce memory requirement
-        if len(history) > (2 * self.max_history + 1):
-            history = history[-(2 * self.max_history + 1):]
-
+        # h[0] contains the response
+        history = [h[0] for h in history]
         history, fact = self.truncate_sequences(history, fact)
 
         candidates = self.sample_candidates(self.dataset, index)
@@ -54,7 +53,7 @@ class TopicalChatsDataset(Dataset):
     def sample_candidates(self, dataset, current_conversation_index):
         # Lets just hope that the number of cases where the true responses gets included in the
         # candidates is vanishingly small
-        candidates = [response for (_, response, _) in random.sample(dataset, self.num_candidates - 1)]
+        candidates = [response for (_, (response, _, _)) in random.sample(dataset, self.num_candidates - 1)]
 
         return candidates
 

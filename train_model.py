@@ -240,16 +240,18 @@ def collate_batch_elements(batch, tokenizer, args):
     return tensorized_input
 
 def get_data_loaders_optimized(args, tokenizer):
+    if args.dataset_configuration == "dstc9":
+        topical_chat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache, args.training_configuration)
+    else:
+        topical_chat = augmented_tc_dataset(tokenizer, args.dataset_path, args.dataset_cache,
+                                            args.knowledge_index_path, args.training_configuration)
 
     if args.training_configuration == "baseline":
-        topical_chat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache)
-        train_dataset, valid_dataset = TopicalChatsDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), TopicalChatsDataset(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS, args)
-    elif args.training_configuration == "kd-pd-nrg-swbd":
-        topical_chat = augmented_tc_dataset(tokenizer, args.dataset_path, args.dataset_cache, args.knowledge_index_path, "switchboard_da")
-        train_dataset, valid_dataset = TopicalChatsKDDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), TopicalChatsKDDataset(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS, args)
+        train_dataset, valid_dataset = TopicalChatsDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), \
+                                       TopicalChatsDataset(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS, args)
     else:
-        topical_chat = augmented_tc_dataset(tokenizer, args.dataset_path, args.dataset_cache, args.knowledge_index_path, "mezza_da")
-        train_dataset, valid_dataset = TopicalChatsKDDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), TopicalChatsKDDataset(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS, args)
+        train_dataset, valid_dataset = TopicalChatsKDDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), \
+                                       TopicalChatsKDDataset(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS, args)
 
     train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset) if args.distributed else None
     valid_sampler = torch.utils.data.distributed.DistributedSampler(valid_dataset) if args.distributed else None
@@ -398,6 +400,10 @@ def train():
     parser.add_argument('--training_configuration', type=str, default="baseline",
                         help="Training configuration to run",
                         choices=["baseline", "kd-pd-nrg", "kd-pd-nrg-swbd"])
+    parser.add_argument('--dataset_configuration', type=str, default="dstc9",
+                        help="Configuration of dataset to load for training",
+                        choices=["dstc9", "topical-chats"])
+    
     parser.add_argument('--knowledge_index_path', type=str, default="./tc_processed/knowledge_index.pkl",
                         help="Path to knowledge index file")
     parser.add_argument("--dataset_cache", type=str, default='./dataset_caches', help="Path or url of the dataset cache")

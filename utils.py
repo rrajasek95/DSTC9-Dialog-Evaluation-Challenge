@@ -1,3 +1,4 @@
+import itertools
 import json
 import logging
 import os
@@ -12,18 +13,28 @@ CONFIG_NAME = 'config.json'
 
 logger = logging.getLogger(__file__)
 
-def load_data(dataset_path, split):
+def load_data(dataset_path, split, training_configuration):
     path_prefix = os.path.join(dataset_path, split)
 
     # Splitting history into multiple sentences for ease of further processing
     src = [l.strip().split("_eos")[:-1] for l in open(path_prefix + '.src').readlines()]
     tgt = [l.strip().replace("_go", "").replace("_eos", "") for l in open(path_prefix + '.tgt').readlines()]
     fct = [l.strip() for l in open(path_prefix + '.fct').readlines()]
-    return list(zip(src, tgt, fct))
+    if training_configuration != "baseline":
+        history_da = [l.strip().split("_eos")[:-1] for l in open(path_prefix + ".src.da").readlines()]
+        history_knowledge = [l.strip().split("_eos")[:-1] for l in open(path_prefix + ".src.fct")]
+        resp_da = [l.strip() for l in open(path_prefix + '.fct.da').readlines()]
+    else:
+        history_da = itertools.repeat(itertools.repeat(None))
+        history_knowledge = itertools.repeat(itertools.repeat(None))
+        resp_da = itertools.repeat(None)
+
+    context = [zip(s, h, k) for (s, h, k) in zip(src, history_da, history_knowledge)]
+    return list(zip(context, zip(tgt, resp_da, fct)))
 
 
 
-def get_dataset(tokenizer, dataset_path, dataset_cache):
+def get_dataset(tokenizer, dataset_path, dataset_cache, training_configuration):
     dataset_cache = dataset_cache + '_' + type(tokenizer).__name__
 
     if dataset_cache and os.path.isfile(dataset_cache):
@@ -37,9 +48,11 @@ def get_dataset(tokenizer, dataset_path, dataset_cache):
         dataset = dict()
 
         for split in splits:
-            data_items = load_data(dataset_path, split)
+            data_items = load_data(dataset_path, split, training_configuration)
 
             def tokenize(obj):
+                if obj is None:
+                    return None
                 if isinstance(obj, str):
                     return tokenizer.convert_tokens_to_ids(tokenizer.tokenize(obj))
                 if isinstance(obj, tuple):
