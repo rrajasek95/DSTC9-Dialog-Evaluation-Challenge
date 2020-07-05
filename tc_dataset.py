@@ -183,7 +183,7 @@ class TopicalChatsKDDataset(TopicalChatsDataset):
         if self.dataset_configuration != "dstc9":
             encoded_das = self.tokenizer.encode([f"<{da['label']}>" for da in mezza_das])
         else:
-            encoded_das = self.tokenizer.encode([f"<{da}>" for da in mezza_das])
+            encoded_das = mezza_das
         instances = []
 
         # The action plan must be ground-truth for training and validation
@@ -194,4 +194,5 @@ class TopicalChatsKDDataset(TopicalChatsDataset):
             lm_labels = bool(j == self.num_candidates - 1)
             instance = self.build_input_from_segments(history, candidate, action_plan, self.tokenizer, lm_labels)
             instances.append(instance)
+            print(self.tokenizer.decode(instance["input_ids"]))
         return instances
