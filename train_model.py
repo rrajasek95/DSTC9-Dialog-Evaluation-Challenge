@@ -344,7 +344,6 @@ def run_evaluation(model, val_loader, tokenizer, writer, args):
             # [batch_size]
             # [batch_size, num_cands, seq_len]
             input_ids, mc_token_ids, lm_labels, mc_labels, token_type_ids = batch
-            logger.info(tokenizer.decode(input_ids[0, -1, :].tolist()))
             # if we dont send labels to model, it doesnt return losses
             lm_logits, mc_logits, *_ = model(
                 input_ids, token_type_ids=token_type_ids, mc_token_ids=mc_token_ids,
