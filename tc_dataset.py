@@ -102,6 +102,7 @@ class TopicalChatsKDDataset(TopicalChatsDataset):
     def _init_knowledge_index(self, knowledge_index_path):
         with open(knowledge_index_path, 'rb') as knowledge_index_file:
             index_data = pickle.load(knowledge_index_file)
+
         self.knowledge_retriever = index_data["bm25_index"]
         self.tfidf_vec = index_data["tfidf_vec"]
         self.knowledge_sentences = index_data["knowledge_list"]
@@ -114,6 +115,7 @@ class TopicalChatsKDDataset(TopicalChatsDataset):
         # For inference, the model will start executing the
         # heuristic dialog policy and knowledge selection policy
         self.inference = inference
+        self.dataset_configuration = args.dataset_configuration
         super().__init__(dataset, tokenizer, special_tokens, args)
 
     def sample_candidates(self, dataset, current_conversation_index):
@@ -178,12 +180,15 @@ class TopicalChatsKDDataset(TopicalChatsDataset):
 
         candidates = self.sample_candidates(self.dataset, index)
         candidates.append(response)
-        encoded_das = self.tokenizer.encode([f"<{da['label']}>" for da in mezza_das])
+        if self.dataset_configuration != "dstc9":
+            encoded_das = self.tokenizer.encode([f"<{da['label']}>" for da in mezza_das])
+        else:
+            encoded_das = self.tokenizer.encode([f"<{da}>" for da in mezza_das])
         instances = []
 
         # The action plan must be ground-truth for training and validation
         # However, for inference time, it must follow the policy
-        uses_fact = self.tokenizer.encode("_nofact" if len(knowledge) == 0 else "_fact")
+        uses_fact = self.tokenizer.encode("_nofact" if len(knowledge) <= 1 else "_fact")
         action_plan = encoded_das + fact + uses_fact
         for j, candidate in enumerate(candidates):
             lm_labels = bool(j == self.num_candidates - 1)
