@@ -171,10 +171,11 @@ def collate_batch_elements(batch, tokenizer, args):
     return tensorized_input
 
 def get_loader(args, tokenizer):
-    if args.training_configuration == "baseline":
-        topical_chat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache)
+    if args.dataset_configuration == "dstc9":
+        topical_chat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache, args.training_configuration)
     else:
-        topical_chat = augmented_tc_dataset(tokenizer, args.dataset_path, args.dataset_cache, args.knowledge_index_path)
+        topical_chat = augmented_tc_dataset(tokenizer, args.dataset_path, args.dataset_cache,
+                                            args.knowledge_index_path, args.training_configuration)
     splits = list(topical_chat.keys())
     for split in splits:
         if split != args.split:
@@ -184,7 +185,7 @@ def get_loader(args, tokenizer):
         dataset = TopicalChatsDataset(topical_chat[args.split], tokenizer, SPECIAL_TOKENS, args)
     else:
         dataset = TopicalChatsKDDataset(topical_chat[args.split], tokenizer, SPECIAL_TOKENS, args,
-                                        inference=True)  # Enable heuristic dialog policy
+                                        inference=args.heuristic_policy)  # Enable heuristic dialog policy
 
     sampler = torch.utils.data.distributed.DistributedSampler(dataset) if args.distributed else None
     loader = DataLoader(dataset, sampler=sampler, batch_size=args.valid_batch_size,
@@ -241,6 +242,11 @@ if __name__ == '__main__':
     parser.add_argument('--training_configuration', type=str, default="baseline",
                         help="Training configuration to run",
                         choices=["baseline", "kd-pd-nrg", "kd-pd-nrg-swbd"])
+    parser.add_argument('--dataset_configuration', type=str, default="dstc9",
+                        help="Configuration of dataset to load for training",
+                        choices=["dstc9", "topical-chats"])
+    parser.add_argument('--heuristic_policy', action='store_true',
+                        help="Enable heuristic dialog policy for generation (as opposed to using ground truth)")
     parser.add_argument('--knowledge_index_path', type=str, default="./tc_processed/knowledge_index.pkl",
                         help="Path to knowledge index file")
     parser.add_argument('--model_checkpoint', type=str, default="runs/topical_chats_gpt2/",
