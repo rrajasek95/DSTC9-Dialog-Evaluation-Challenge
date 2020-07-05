@@ -481,7 +481,13 @@ def train():
 
     # Load the model after the tokenizer. We hit an OOM error if we try to pre-load the model
     model_class = GPT2DoubleHeadsModel
-    model = model_class.from_pretrained(args.model_checkpoint)
+
+    # Hack to evaluate model in the way we saved. TODO: Fix this today
+    if os.path.isdir(args.model_checkpoint):
+        data = torch.load(args.model_checkpoint + '/pytorch_model.bin')
+        model = data["mymodel"]
+    else:
+        model = model_class.from_pretrained(args.model_checkpoint)
     model.to(args.device)
 
     # Add special tokens if they are not already added
