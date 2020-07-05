@@ -462,7 +462,7 @@ def train():
     logger.info("Arguments: %s", pformat(args))
 
     logger.info("Prepare tokenizer, pretrained model and optimizer.")
-    tokenizer_class = GPT2Tokenizer if "gpt2" in args.model_checkpoint else OpenAIGPTTokenizer  # cant use Autotokenizer because checkpoint could be a Path
+    tokenizer_class = GPT2Tokenizer
     tokenizer = tokenizer_class.from_pretrained(args.model_checkpoint)
 
 
@@ -481,7 +481,7 @@ def train():
     train_loader, _, _, _ = loaders
 
     # Load the model after the tokenizer. We hit an OOM error if we try to pre-load the model
-    model_class = GPT2DoubleHeadsModel if "gpt2" in args.model_checkpoint else OpenAIGPTDoubleHeadsModel
+    model_class = GPT2DoubleHeadsModel
     model = model_class.from_pretrained(args.model_checkpoint)
     model.to(args.device)
 
