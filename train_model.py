@@ -29,12 +29,12 @@ from tqdm.auto import tqdm
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-from transformers import AdamW, GPT2Tokenizer, OpenAIGPTTokenizer, OpenAIGPTDoubleHeadsModel
+from transformers import AdamW, GPT2Tokenizer
 from gpt2 import GPT2DoubleHeadsModel
 
 from tc_dataset import TopicalChatsDataset, TopicalChatsKDDataset
-from metrics import RunningMetric, RunningLambdaMetric, MetricLambda
-from scheduler import PiecewiseLinearLR
+from train_util.metrics import RunningMetric, RunningLambdaMetric, MetricLambda
+from train_util.scheduler import PiecewiseLinearLR
 from utils import get_dataset, GlobalStepCounter, CONFIG_NAME, augmented_tc_dataset
 
 from pd_nrg.policies import (NO_DIALOGUE_ACT, THANKING, DIRECTIVE,
