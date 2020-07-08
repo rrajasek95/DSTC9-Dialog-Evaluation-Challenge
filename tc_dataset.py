@@ -82,7 +82,12 @@ class TopicalChatsDataset(Dataset):
         instance["token_type_ids"] = [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence) for _ in s]
         instance["mc_token_ids"] = len(instance["input_ids"]) - 1
 
-        # I have no idea what this part refers to, Cargo Culting for now
+        """
+        Explanation:
+        lm_labels is token-wise mask that is used to compute language modeling loss 
+        We want the language modeling loss to propagate only when we generate
+        incorrectly on the true response and not on the distractor responses
+        """
         instance["lm_labels"] = [-100] * len(instance["input_ids"])
         if lm_labels:
             instance["lm_labels"] = ([-100] * sum(len(s) for s in sequence[:-1])) + [-100] + sequence[-1][1:]
