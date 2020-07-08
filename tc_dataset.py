@@ -175,6 +175,11 @@ class TopicalChatsKDDataset(TopicalChatsDataset):
 
         dialog_state = self._construct_dialog_state(history)
         if self.inference:
+            """
+            During inference time, there is no ground truth utterance to 
+            choose the appropriate knowledge on. So we use a heuristic policy 
+            to "predict" the best knowledge and dialogue act to use for the next turn.
+            """
             mezza_das, knowledge = self._execute_heuristic_policy(dialog_state)
             mezza_das = self.tokenizer.encode([f"<{da}>" for da in mezza_das])
         history, fact = self.truncate_sequences(dialog_state["turn_history"], knowledge)

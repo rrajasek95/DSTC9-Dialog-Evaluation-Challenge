@@ -84,6 +84,12 @@ def process_split(dataset_path, split, tokenizer, index):
                 for segment in turn["segments"]:
                     sentence = segment["text"]
                     sentence_vec = vec.transform([sentence])
+                    """
+                    In this section, we find the knowledge sentence that is closest
+                    to the ground truth response expected from the model.
+                    This is so that the model learns to appropriately condition on
+                    the knowledge
+                    """
                     similarities = linear_kernel(tfidf_vecs, sentence_vec).flatten()
                     closest_knowledge_index = similarities.argsort()[-1]
 
