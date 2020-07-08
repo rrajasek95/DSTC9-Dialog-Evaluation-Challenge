@@ -130,13 +130,16 @@ def build_tfidf_from_dstc9(args):
     corpus = [clean(e) for e in corpus]
     vectorizer.fit(corpus)
 
+    potential_facts = [e.strip() for e in open("../processed_output/train.fct").readlines()]
+    potential_facts = [e for e in potential_facts if len(e.split()) < 20]
+
     index_path = os.path.join(args.data_dir,
                            'processed_output',
                            'knowledge_index_dstc9.pkl')
     with open(index_path, 'wb') as index_file:
         index_dict = {
             "tfidf_vec": vectorizer,
-            "knowledge_list": corpus
+            "knowledge_list": potential_facts
         }
 
         pickle.dump(index_dict, index_file)
