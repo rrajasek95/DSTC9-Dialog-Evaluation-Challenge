@@ -153,6 +153,16 @@ def generate_references_for_split(dataset_path, dataset_cache, split, output_pat
     with open(output_path, 'w') as references_file:
         references_file.writelines(responses[:-1])
 
+def make_path(path):
+    """
+    Based off: https://stackoverflow.com/a/600612
+    Recursively make directories for the given path.
+    Replicates "mkdir -p" functionality
+
+    :param path:
+    :return:
+    """
+    os.makedirs(path, exist_ok=True)
 
 if __name__ == '__main__':
     pass

@@ -36,7 +36,7 @@ from tc_dataset import TopicalChatsDataset, TopicalChatsKDDataset
 from train_util.decode import top_filtering
 from train_util.metrics import RunningMetric, RunningLambdaMetric, MetricLambda
 from train_util.scheduler import PiecewiseLinearLR
-from utils import get_dataset, GlobalStepCounter, CONFIG_NAME, augmented_tc_dataset
+from utils import get_dataset, GlobalStepCounter, CONFIG_NAME, augmented_tc_dataset, make_path
 
 from pd_nrg.policies import (NO_DIALOGUE_ACT, THANKING, DIRECTIVE,
                              COMMISSIVE, APOLOGY, CHOICE_Q, SET_Q,
@@ -235,9 +235,7 @@ def get_data_loaders_optimized(args, tokenizer):
 
 def save_model(model, checkpoint_name, args):
     checkpoint_dir = os.path.join(args.log_dir, args.experiment_name, 'checkpoints')
-
-    if not os.path.exists(checkpoint_dir):
-        os.makedirs(checkpoint_dir)
+    make_path(checkpoint_dir)
 
     checkpoint_file = os.path.join(checkpoint_dir, checkpoint_name + '.pth')
     torch.save({"mymodel": getattr(model, 'module', model)}, checkpoint_file)
