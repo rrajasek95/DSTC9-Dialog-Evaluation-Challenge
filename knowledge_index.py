@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 import pickle
+import string
 
 import nltk
 from nltk.tokenize import word_tokenize, sent_tokenize
@@ -59,6 +60,7 @@ def extract_knowledge_sentences(split_knowledge):
         #             knowledge_set.add(sent)
     return knowledge_set
 
+
 def index_knowledge(args):
     data_dir = os.path.join(
         args.data_dir,
@@ -101,9 +103,56 @@ def build_knowledge_set(data_dir, reading_set_files):
     return knowledge_list
 
 
+"""
+Methods derived from the baseline dynamic.py script.
+
+I am using this as an alternative since the fact 
+handling seems more robust here than what I did for
+topical chats!
+"""
+
+
+def clean(s):
+  return ''.join([c for c in s.lower() if c not in string.punctuation])
+
+
+def build_tfidf_from_dstc9(args):
+    vectorizer = TfidfVectorizer()
+    corpus = []
+
+    for suffix in ["src", "tgt", "fct"]:
+        data_file_path = os.path.join(args.data_dir,
+                     'processed_output',
+                     f"train.{suffix}")
+
+        with open(data_file_path, "r") as file:
+            corpus += [e.strip() for e in file.readlines()]
+    corpus = [clean(e) for e in corpus]
+    vectorizer.fit(corpus)
+
+    index_path = os.path.join(args.data_dir,
+                           'processed_output',
+                           'knowledge_index_dstc9.pkl')
+    with open(index_path, 'wb') as index_file:
+        index_dict = {
+            "tfidf_vec": vectorizer,
+            "knowledge_list": corpus
+        }
+
+        pickle.dump(index_dict, index_file)
+        print(f"Index has been built and saved to '{index_path}'")
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('--dataset_type', type=str, default="dstc9",
+                        choices=['topical_chats', 'dstc9'],
+                        help="Dataset for knowledge")
+
     parser.add_argument('--data_dir', type=str, default='./',
                         help='Directory where the topical chats folder is present')
     args = parser.parse_args()
-    index_knowledge(args)
+    if args.dataset_type == "dstc9":
+        build_tfidf_from_dstc9(args)
+    else:
+        index_knowledge(args)
