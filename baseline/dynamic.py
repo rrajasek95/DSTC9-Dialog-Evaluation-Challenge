@@ -44,7 +44,7 @@ def tokenize(data):
   return new_data
 
 vectorizer = build_tfidf()
-potential_facts = [e.strip() for e in open("processed_output/train.fct").readlines()]
+potential_facts = [e.strip() for e in open("../processed_output/train.fct").readlines()]
 potential_facts = [e for e in potential_facts if len(e.split()) < 20]
 f_vec = vectorizer.transform([clean(e) for e in potential_facts])
 def best_fact(message):

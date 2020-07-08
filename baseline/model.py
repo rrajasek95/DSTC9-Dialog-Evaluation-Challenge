@@ -5,7 +5,8 @@ import torch.nn.functional as F
 
 from torch import optim
 
-import transformer
+from baseline import transformer
+
 
 class Encoder(nn.Module):
   def __init__(self, vocab_size, emb_size, hid_size, num_layers):
