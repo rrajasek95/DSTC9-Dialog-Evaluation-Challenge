@@ -7,10 +7,20 @@ import os
 import pickle
 import string
 
-import nltk
-from nltk.tokenize import word_tokenize, sent_tokenize
-from rank_bm25 import BM25Okapi
+from nltk import word_tokenize
 from sklearn.feature_extraction.text import TfidfVectorizer
+
+def load_split_conversation_data(data_file_path, split):
+    split_conversation_path = os.path.join(
+        data_file_path,
+        'conversations',
+        f'{split}.json'
+    )
+
+    with open(split_conversation_path, 'r') as split_conversation_file:
+        split_conv_data = json.load(split_conversation_file)
+
+    return split_conv_data
 
 def extract_fact_set(factsets):
 
@@ -21,28 +31,37 @@ def extract_fact_set(factsets):
 
         if fun_facts:
             for fact in fun_facts:
-                sentences.append(fact)
+                sentences.append(clean(fact))
 
         short_wiki = data.get("shortened_wiki_lead_section")
 
         if short_wiki:
-            for sent in sent_tokenize(short_wiki):
-                sentences.append(sent)
+            sentences.append(clean(short_wiki))
 
         summarized_wiki = data.get("summarized_wiki_lead_section")
 
         if summarized_wiki:
-            for sent in sent_tokenize(summarized_wiki):
-                sentences.append(sent)
+            sentences.append(clean(summarized_wiki))
     return sentences
 
 
+def load_split_reading_set(data_file_path, split):
+    split_reading_set_path = os.path.join(
+        data_file_path,
+        'reading_sets',
+        'post-build',
+        f'{split}.json'
+    )
+    with open(split_reading_set_path, 'r') as reading_set_file:
+        split_reading_set = json.load(reading_set_file)
 
-def extract_knowledge_sentences(split_knowledge):
+    return split_reading_set
 
+
+def build_knowledge_set(reading_set):
     knowledge_set = set()
-    for conv_id, data in split_knowledge.items():
 
+    for conv_id, data in reading_set.items():
         knowledge_set.update(extract_fact_set(data["agent_1"]))
         knowledge_set.update(extract_fact_set(data["agent_2"]))
 
@@ -51,57 +70,51 @@ def extract_knowledge_sentences(split_knowledge):
         article_indices = ['AS1', 'AS2', 'AS3', 'AS4']
 
         # Article information
-        # if "AS1" in article_data:
-        #     for idx in article_indices:
-        #         sentence = article_data[idx]
-        #         for sent in sent_tokenize(sentence):
-        #             if len(word_tokenize(sent)) < 5:
-        #                 continue
-        #             knowledge_set.add(sent)
+        if "AS1" in article_data:
+            for idx in article_indices:
+                sentence = article_data[idx]
+                if len(word_tokenize(sentence)) < 5:
+                    continue
+                knowledge_set.add(clean(sentence))
+
     return knowledge_set
 
 
-def index_knowledge(args):
-    data_dir = os.path.join(
+def build_topical_chats_knowledge_index(args):
+    data_file_path = os.path.join(
         args.data_dir,
         'alexa-prize-topical-chat-dataset',
-        'reading_sets',
-        'post-build',
     )
-    reading_set_files = os.listdir(data_dir)
 
-    knowledge_list = build_knowledge_set(data_dir, reading_set_files)
+    splits = ['train', 'valid_freq', 'valid_rare', 'test_freq', 'test_rare']
 
-    tfidf_vec = TfidfVectorizer(tokenizer=nltk.tokenize.word_tokenize)
-    tfidf_vec.fit(knowledge_list)
-
-    knowledge_index = BM25Okapi(knowledge_list, tokenizer=word_tokenize)
-
-    with open(os.path.join(args.data_dir,
-                           'tc_processed',
-                           'knowledge_index.pkl'), 'wb') as index_file:
-        index_dict = {
-            "tfidf_vec": tfidf_vec,
-            "bm25_index": knowledge_index,
-            "knowledge_list": knowledge_list
-        }
-        pickle.dump(index_dict, index_file)
-
-
-def build_knowledge_set(data_dir, reading_set_files):
     knowledge_set = set()
-    for file_path in reading_set_files:
-        if 'hash' in file_path:
-            continue
+
+    for split in splits:
+        split_reading_set = load_split_reading_set(data_file_path, split)
+
+        knowledge_set |= build_knowledge_set(split_reading_set)
+
+    corpus = sorted(list(knowledge_set), key=lambda x: len(x))
+
+    vectorizer = TfidfVectorizer()
 
         with open(os.path.join(data_dir, file_path), 'r') as reading_set_file:
             split_knowledge = json.load(reading_set_file)
 
-        knowledge_set.update(extract_knowledge_sentences(split_knowledge))
-    knowledge_list = list(knowledge_set)
-    print(len(knowledge_set))
-    return knowledge_list
+    transformed_knowledge_sentences = vectorizer.fit_transform(corpus)
 
+
+    knowledge_index_path = os.path.join(args.data_dir,
+              'tc_processed',
+              'tc_knowledge_index.pkl')
+
+    with open(knowledge_index_path, 'wb') as knowledge_index_file:
+        pickle.dump({
+            "vectorizer": vectorizer,
+            "knowledge": corpus,
+            "knowledge_vecs": transformed_knowledge_sentences
+        }, knowledge_index_file)
 
 """
 Methods derived from the baseline dynamic.py script.
@@ -113,7 +126,7 @@ topical chats!
 
 
 def clean(s):
-  return ''.join([c for c in s.lower() if c not in string.punctuation])
+  return ''.join([c if c not in string.punctuation else ' ' for c in s.lower()])
 
 
 def build_tfidf_from_dstc9(args):
@@ -158,4 +171,4 @@ if __name__ == '__main__':
     if args.dataset_type == "dstc9":
         build_tfidf_from_dstc9(args)
     else:
-        index_knowledge(args)
+        build_topical_chats_knowledge_index(args)
