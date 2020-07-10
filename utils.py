@@ -5,9 +5,12 @@ import os
 import pickle
 
 import torch
+from nltk import word_tokenize
 from sklearn.metrics.pairwise import linear_kernel
 from tqdm import tqdm
 from transformers import GPT2Tokenizer
+
+from knowledge_index import extract_fact_set, clean
 
 CONFIG_NAME = 'config.json'
 
@@ -65,46 +68,117 @@ def get_dataset(tokenizer, dataset_path, dataset_cache, training_configuration):
         torch.save(dataset, dataset_cache)
     return dataset
 
+def extract_fact_set_mapped(factsets):
+
+    sentences = []
+    original_sentences = dict()
+    for idx, data in factsets.items():
+
+        fun_facts = data.get("fun_facts")
+
+        if fun_facts:
+            for fact in fun_facts:
+                cleaned_fact = clean(fact)
+                sentences.append(cleaned_fact)
+                original_sentences[cleaned_fact] = fact
+
+        short_wiki = data.get("shortened_wiki_lead_section")
+
+        if short_wiki:
+            cleaned_swiki = clean(short_wiki)
+            sentences.append(cleaned_swiki)
+            original_sentences[cleaned_swiki] = short_wiki
+
+        summarized_wiki = data.get("summarized_wiki_lead_section")
+
+        if summarized_wiki:
+            cleaned_sum_wiki = clean(summarized_wiki)
+            sentences.append(cleaned_sum_wiki)
+            original_sentences[cleaned_sum_wiki] = summarized_wiki
+    return original_sentences
 
 def process_split(dataset_path, split, tokenizer, index):
-    vec, knowledge_sentences, tfidf_vecs, dialog_act = index
+    vec, dialog_act = index
     path_prefix = os.path.join(dataset_path, split)
-
+    reading_set_path = os.path.join(dataset_path, 'reading_sets', f'{split}.json')
     data = []
-    with open(path_prefix + '_full_anno.json', 'r') as annotated_split_file:
+    with open(path_prefix + '_full_anno.json', 'r') as annotated_split_file, \
+            open(reading_set_path, 'r') as reading_set_file:
         annotated_data = json.load(annotated_split_file)
+        reading_set = json.load(reading_set_file)
         for conv_id, conv_data in tqdm(annotated_data.items()):
             context = []
+
+            conv_reading_set = reading_set[conv_id]
+            fact_mapping_1 = extract_fact_set_mapped(conv_reading_set["agent_1"])
+            fact_mapping_2 = extract_fact_set_mapped(conv_reading_set["agent_2"])
+            fact_set_1 = set(fact_mapping_1.keys())
+            fact_set_2 = set(fact_mapping_2.keys())
+
+            article_data = conv_reading_set["article"]
+
+            article_indices = ['AS1', 'AS2', 'AS3', 'AS4']
+
+            common_knowledge_mapping = dict()
+            if "AS1" in article_data:
+                for idx in article_indices:
+                    sentence = article_data[idx]
+                    if len(word_tokenize(sentence)) < 5:
+                        continue
+
+                    cleaned_sentence = clean(sentence)
+                    common_knowledge_mapping[cleaned_sentence] = sentence
+            common_knowledge_set = set(common_knowledge_mapping.keys())
+            fact_set_1.update(common_knowledge_set)
+            fact_set_2.update(common_knowledge_set)
+
+            fact_mapping_1.update(common_knowledge_mapping)
+            fact_mapping_2.update(common_knowledge_mapping)
+            agent_knowledge = {
+                "agent_1": list(fact_set_1),
+                "agent_2": list(fact_set_2)
+            }
+
+            agent_mapping = {
+                "agent_1": fact_mapping_1,
+                "agent_2": fact_mapping_2
+            }
+
             for turn in conv_data["content"]:
                 # This is a highly approximate heuristic.
                 # Both Gopalakrishnan et al. 2019 and Hedayatnia et al. 2020
                 # acknowledge they don't have anything better for this issue
                 response = turn["message"]
 
+                available_knowledge = agent_knowledge[turn["agent"]]
                 for segment in turn["segments"]:
                     sentence = segment["text"]
-                    sentence_vec = vec.transform([sentence])
+                    text_tfidf = vec.transform([clean(sentence)])
                     """
                     In this section, we find the knowledge sentence that is closest
                     to the ground truth response expected from the model.
                     This is so that the model learns to appropriately condition on
                     the knowledge
                     """
-                    similarities = linear_kernel(tfidf_vecs, sentence_vec).flatten()
+                    knowledge_tfidf = vec.transform(available_knowledge)
+
+                    similarities = linear_kernel(knowledge_tfidf, text_tfidf).flatten()
                     closest_knowledge_index = similarities.argsort()[-1]
 
                     if similarities[closest_knowledge_index] > 0.3:
-                        knowledge_sentence = knowledge_sentences[closest_knowledge_index]
+                        knowledge_sentence = available_knowledge[closest_knowledge_index]
                         break
                 else:
-                    response_vec = vec.transform([response])
-                    similarities = linear_kernel(tfidf_vecs, response_vec).flatten()
+                    text_tfidf = vec.transform([clean(response)])
+                    knowledge_tfidf = vec.transform(available_knowledge)
+                    similarities = linear_kernel(knowledge_tfidf, text_tfidf).flatten()
                     closest_knowledge_index = similarities.argsort()[-1]
 
-                    knowledge_sentence = knowledge_sentences[closest_knowledge_index] \
+                    knowledge_sentence = available_knowledge[closest_knowledge_index] \
                         if similarities[closest_knowledge_index] > 0.3 else ""
 
-                current_turn_data = (tokenizer.encode(response), turn[dialog_act], tokenizer.encode(knowledge_sentence))
+                original_knowledge_sentence = agent_mapping[turn["agent"]].get(knowledge_sentence, "")
+                current_turn_data = (tokenizer.encode(response), turn[dialog_act], tokenizer.encode(original_knowledge_sentence))
                 data.append((context, current_turn_data))
                 context = context + [current_turn_data]
 
@@ -115,9 +189,7 @@ def augmented_tc_dataset(tokenizer, dataset_path, dataset_cache, knowledge_index
     dataset_cache = dataset_cache + '_augmented_' + type(tokenizer).__name__
     with open(knowledge_index_path, 'rb') as knowledge_index_file:
         index_data = pickle.load(knowledge_index_file)
-    vec = index_data["tfidf_vec"]
-    knowledge_sentences = index_data["knowledge_list"]
-    tfidf_vecs = vec.transform(knowledge_sentences)
+    vec = index_data["vectorizer"]
     if dataset_cache and os.path.isfile(dataset_cache):
         logger.info("Load tokenized dataset from cache at %s", dataset_cache)
         dataset = torch.load(dataset_cache)
@@ -129,7 +201,7 @@ def augmented_tc_dataset(tokenizer, dataset_path, dataset_cache, knowledge_index
         dataset = {}
         for split in splits:
 
-            dataset[split] = process_split(dataset_path, split, tokenizer, (vec, knowledge_sentences, tfidf_vecs, dialog_act))
+            dataset[split] = process_split(dataset_path, split, tokenizer, (vec, dialog_act))
             logger.info("Processed split %s", split)
         torch.save(dataset, dataset_cache)
 
