@@ -99,11 +99,7 @@ def build_topical_chats_knowledge_index(args):
 
     vectorizer = TfidfVectorizer()
 
-        with open(os.path.join(data_dir, file_path), 'r') as reading_set_file:
-            split_knowledge = json.load(reading_set_file)
-
     transformed_knowledge_sentences = vectorizer.fit_transform(corpus)
-
 
     knowledge_index_path = os.path.join(args.data_dir,
               'tc_processed',
