@@ -115,10 +115,12 @@ class TopicalChatsKDDataset(TopicalChatsDataset):
 
     def __init__(self, dataset, tokenizer, special_tokens, args, inference=False):
         self.dialog_policy = KnowledgeDependent()
-        self._init_knowledge_index(args.knowledge_index_path)
+
         # For inference, the model will start executing the
         # heuristic dialog policy and knowledge selection policy
         self.inference = inference
+        if self.inference:
+            self._init_knowledge_index(args.knowledge_index_path)
         self.dataset_configuration = args.dataset_configuration
         super().__init__(dataset, tokenizer, special_tokens, args)
 
