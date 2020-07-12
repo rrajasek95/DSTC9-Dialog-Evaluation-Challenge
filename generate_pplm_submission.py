@@ -365,92 +365,92 @@ def generate_text_pplm(model, tokenizer,
             if output_so_far.shape[1] > 1:
                 _, past, _ = model(output_so_far[:, :-1])
 
-            unpert_logits, unpert_past, unpert_all_hidden = model(output_so_far)
-            unpert_last_hidden = unpert_all_hidden[-1]
+        unpert_logits, unpert_past, unpert_all_hidden = model(output_so_far)
+        unpert_last_hidden = unpert_all_hidden[-1]
 
-            # Check if we're above grad max length
-            if i >= grad_length:
-                current_stepsize = stepsize * 0
+        # Check if we're above grad max length
+        if i >= grad_length:
+            current_stepsize = stepsize * 0
+        else:
+            current_stepsize = stepsize
+
+        # Modify the past if necessary
+        if not perturb or num_iterations == 0:
+            pert_past = past
+        else:
+            accumulated_hidden = unpert_last_hidden[:, :-1, :]
+            accumulated_hidden = torch.sum(accumulated_hidden, dim=1)
+
+            if past is not None:
+                pert_past, _, grad_norms, loss_this_iter = perturb_past(
+                    past,
+                    model,
+                    last,
+                    unpert_past=unpert_past,
+                    unpert_logits=unpert_logits,
+                    accumulated_hidden=accumulated_hidden,
+                    grad_norms=grad_norms,
+                    stepsize=current_stepsize,
+                    classifier=classifier,
+                    classifier_fields=classifier_fields,
+                    class_label=class_label,
+                    num_iterations=num_iterations,
+                    horizon_length=horizon_length,
+                    window_length=window_length,
+                    decay=decay,
+                    gamma=gamma,
+                    kl_scale=kl_scale,
+                    device=device,
+                    tokenizer=tokenizer
+                )
+
+                loss_in_time.append(loss_this_iter)
             else:
-                current_stepsize = stepsize
-
-            # Modify the past if necessary
-            if not perturb or num_iterations == 0:
                 pert_past = past
+
+        pert_logits, past, pert_all_hidden = model(last, past=pert_past)
+        pert_logits = pert_logits[:, -1, :] / temperature
+
+        for token_idx in set(output_so_far[0].tolist()):
+            if pert_logits[0, token_idx] < 0:
+                pert_logits[0, token_idx] *= repetition_penalty
             else:
-                accumulated_hidden = unpert_last_hidden[:, :-1, :]
-                accumulated_hidden = torch.sum(accumulated_hidden, dim=1)
+                pert_logits[0, token_idx] /= repetition_penalty
 
-                if past is not None:
-                    pert_past, _, grad_norms, loss_this_iter = perturb_past(
-                        past,
-                        model,
-                        last,
-                        unpert_past=unpert_past,
-                        unpert_logits=unpert_logits,
-                        accumulated_hidden=accumulated_hidden,
-                        grad_norms=grad_norms,
-                        stepsize=current_stepsize,
-                        classifier=classifier,
-                        classifier_fields=classifier_fields,
-                        class_label=class_label,
-                        num_iterations=num_iterations,
-                        horizon_length=horizon_length,
-                        window_length=window_length,
-                        decay=decay,
-                        gamma=gamma,
-                        kl_scale=kl_scale,
-                        device=device,
-                        tokenizer=tokenizer
-                    )
+        pert_probs = F.softmax(pert_logits, dim=-1)
 
-                    loss_in_time.append(loss_this_iter)
-                else:
-                    pert_past = past
+        # TODO: Fill this in
+        if classifier is not None:
+            pass
+            # Compute loss of predicted dialog act
+            # this is done by converting the decoded output into a field
+        else:
+            unpert_discrim_loss = 0
 
-            pert_logits, past, pert_all_hidden = model(last, past=pert_past)
-            pert_logits = pert_logits[:, -1, :] / temperature
+        if perturb:
 
-            for token_idx in set(output_so_far[0].tolist()):
-                if pert_logits[0, token_idx] < 0:
-                    pert_logits[0, token_idx] *= repetition_penalty
-                else:
-                    pert_logits[0, token_idx] /= repetition_penalty
+            unpert_probs = F.softmax(unpert_logits[:, -1, :], dim=1)
 
+            pert_probs = (pert_probs ** gm_scale) * (unpert_probs ** (1 - gm_scale))
+            pert_probs = top_k_filter(pert_probs, k=top_k, probs=True)
+
+            # Rescale
+            if torch.sum(pert_probs) <= 1:
+                pert_probs = pert_probs / torch.sum(pert_probs)
+        else:
+            pert_logits = top_k_filter(pert_logits, k=top_k)
             pert_probs = F.softmax(pert_logits, dim=-1)
 
-            # TODO: Fill this in
-            if classifier is not None:
-                pass
-                # Compute loss of predicted dialog act
-                # this is done by converting the decoded output into a field
-            else:
-                unpert_discrim_loss = 0
+        if sample:
+            last = torch.multinomial(pert_probs, num_samples=1)
 
-            if perturb:
+        else:
+            _, last = torch.topk(pert_probs, k=1, dim=-1)
 
-                unpert_probs = F.softmax(unpert_logits[:, -1, :], dim=1)
+        # update context/output_so_far appending the new token
+        output_so_far = last if output_so_far is None else torch.cat((output_so_far, last), dim=1)
 
-                pert_probs = (pert_probs ** gm_scale) * (unpert_probs ** (1 - gm_scale))
-                pert_probs = top_k_filter(pert_probs, k=top_k, probs=True)
-
-                # Rescale
-                if torch.sum(pert_probs) <= 1:
-                    pert_probs = pert_probs / torch.sum(pert_probs)
-            else:
-                pert_logits = top_k_filter(pert_logits, k=top_k)
-                pert_probs = F.softmax(pert_logits, dim=-1)
-
-            if sample:
-                last = torch.multinomial(pert_probs, num_samples=1)
-
-            else:
-                _, last = torch.topk(pert_probs, k=1, dim=-1)
-
-            # update context/output_so_far appending the new token
-            output_so_far = last if output_so_far is None else torch.cat((output_so_far, last), dim=1)
-
-            print(tokenizer.decode(output_so_far.tolist()[0]))
+        print(tokenizer.decode(output_so_far.tolist()[0]))
 
     return output_so_far, unpert_discrim_loss, loss_in_time
 
