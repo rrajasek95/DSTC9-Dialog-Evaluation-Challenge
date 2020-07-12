@@ -28,6 +28,7 @@ sentence planning model.
 import argparse
 import logging
 import os
+import pickle
 import sys
 from collections import defaultdict
 from itertools import chain
@@ -75,7 +76,7 @@ UNK = Dataset.UNK
 def load_discriminator(args):
 
     logger.info("Loading the Discriminative BiLSTM-CRF model")
-    checkpoint = torch.load(DISCRIMINATOR_MODELS_PARAMS["path"], pickle_module=dill, map_location=args.device)
+    checkpoint = torch.load(DISCRIMINATOR_MODELS_PARAMS["path"], pickle_module=pickle, map_location=args.device)
     fields = checkpoint["fields"]
     model_opt = checkpoint["opt"]
 
@@ -156,7 +157,7 @@ def top_k_filter(logits, k, probs=False):
         return torch.where(logits < batch_mins, torch.ones_like(logits) * -BIG_CONST, logits)
 
 def get_loader(args, tokenizer):
-    topical_chat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache)
+    topical_chat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache, args.training_configuration)
 
     splits = list(topical_chat.keys())
     for split in splits:
@@ -262,12 +263,12 @@ def perturb_past(past, model, last, unpert_past, unpert_logits, accumulated_hidd
         conversation = [[tokens]]
         print("Tokens: ", conversation)
         print(classifier_fields["conversation"].process(conversation, device=device))
-        # x, conv_seq, _len, utt_len = classifier_fields["conversation"].process(conversation, device=device)
+        x, _len, utt_len = classifier_fields["conversation"].process(conversation, device=device)
         preds, logits = classifier(x, utt_len)
 
-        label = torch.tensor(preds.shape[0] * [class_label], device=device, dtype=torch.long)
-
-        discrim_loss = CrossEntropyLoss()(preds, label)
+        logits = logits.squeeze(0)
+        label = torch.tensor(logits.shape[0] * [class_label], device=device, dtype=torch.long)
+        discrim_loss = CrossEntropyLoss()(logits, label)
         print(" PPLM discrim loss:", discrim_loss.data.cpu().numpy())
         #
 
@@ -292,7 +293,15 @@ def perturb_past(past, model, last, unpert_past, unpert_logits, accumulated_hidd
         loss.backward()
 
         # TODO: Calculate gradient norms
-
+        if grad_norms is not None:
+            grad_norms = [
+                torch.max(grad_norms[index], torch.norm(p_.grad * window_mask))
+                for index, p_ in enumerate(curr_perturbation)
+            ]
+        else:
+            grad_norms = [
+                (torch.norm(p_.grad * window_mask) + SMALL_CONST) for index, p_ in enumerate(curr_perturbation)
+            ]
         # Normalize gradients
         grad = [
             -stepsize * (p_.grad * window_mask / grad_norms[index]**gamma).data.cpu().numpy()
@@ -312,10 +321,10 @@ def perturb_past(past, model, last, unpert_past, unpert_logits, accumulated_hidd
             new_past.append(p_.detach())
         past = new_past
 
-        grad_accumulator = [torch.from_numpy(p_).requires_grad_(True).to(device=device) for p_ in grad_accumulator]
-        pert_past = list(map(add, past, grad_accumulator))
+    grad_accumulator = [torch.from_numpy(p_).requires_grad_(True).to(device=device) for p_ in grad_accumulator]
+    pert_past = list(map(add, past, grad_accumulator))
 
-        return pert_past, new_accumulated_hidden, grad_norms, loss_per_iter
+    return pert_past, new_accumulated_hidden, grad_norms, loss_per_iter
 
 def generate_text_pplm(model, tokenizer,
                        context=None,
@@ -518,9 +527,12 @@ def run_pplm_da(args):
     discriminator, fields = load_discriminator(args)
 
     # Load GPT2 model
-    model = GPT2LMHeadModel.from_pretrained(args.model_checkpoint, output_hidden_states=True)
-    model.to(args.device)
-    model.eval()
+    data = torch.load(args.model_checkpoint + '/pytorch_model.bin')
+    model = data["mymodel"]
+
+    model = GPT2LMHeadModel.from_pretrained(args.model_checkpoint, output_hidden_states=True, state_dict=model.state_dict())
+    # model.to(args.device)
+    # model.eval()
 
     tokenizer = GPT2Tokenizer.from_pretrained(args.model_checkpoint)
 
@@ -587,6 +599,8 @@ if __name__ == '__main__':
     # LM args
     parser.add_argument("--dataset_path", type=str, default="processed_output",
                         help="Path or url of the dataset. If empty download from S3.")
+    parser.add_argument('--training_configuration', type=str, default="baseline",
+                        help="Training configuration to make use of")
     parser.add_argument('--dataset_cache', type=str, default='./dataset_cache', help='Path or url of the dataset cache')
 
     parser.add_argument('--model_checkpoint',
