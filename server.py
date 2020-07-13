@@ -131,7 +131,6 @@ class CruzControlHandler(tornado.web.RequestHandler):
                    ranker_retriever,
                    model,
                    tokenizer,
-                   dialog_states,
                    special_tokens):
         self.redis_client = redis_client
         self.session_expiry = args.session_expiry
@@ -149,9 +148,6 @@ class CruzControlHandler(tornado.web.RequestHandler):
 
         self.special_tokens_ids = self.tokenizer.convert_tokens_to_ids(special_tokens)
 
-        # TODO: convert this into using a proper caching mechanism (using Redis or something else),
-        #  I don't know how Python's GIL will behave in this situation since it's a web server
-        self.dialog_states = dialog_states
         self.device = args.device
         self.logger = logger
 
@@ -247,7 +243,6 @@ def make_app(args, logger):
     index = _load_knowledge_index(args.knowledge_index_path)
     ranker_retriever = TfIdfRankerRetriever(index, new_index=True)
     model, tokenizer = _load_model(args)
-    dialog_states = defaultdict(lambda: defaultdict(list))
 
     routes = [
         tornado.web.url(r"/", CruzControlHandler, dict(args=args,
@@ -256,7 +251,6 @@ def make_app(args, logger):
                                         ranker_retriever=ranker_retriever,
                                         model=model,
                                         tokenizer=tokenizer,
-                                        dialog_states=dialog_states,
                                         special_tokens=SPECIAL_TOKENS))
     ]
 
