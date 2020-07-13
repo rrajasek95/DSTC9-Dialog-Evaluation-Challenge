@@ -6,7 +6,6 @@ from torch.utils.data import Dataset
 
 from pd_nrg.policies import KnowledgeDependent
 
-from sklearn.metrics.pairwise import linear_kernel
 
 from pd_nrg.ranker import TfIdfRankerRetriever
 from pd_nrg.ranker import EmbRankerRetriever
@@ -110,13 +109,11 @@ class TopicalChatsDataset(Dataset):
 
 class TopicalChatsKDDataset(TopicalChatsDataset):
     def _init_knowledge_index(self, knowledge_index_path, knowledge_policy):
+        with open(knowledge_index_path, 'rb') as knowledge_index_file:
+            index_data = pickle.load(knowledge_index_file)
         if knowledge_policy == "tf_idf":
-            with open(knowledge_index_path, 'rb') as knowledge_index_file:
-                index_data = pickle.load(knowledge_index_file)
             self.ranker_retriever = TfIdfRankerRetriever(index_data)
         else:
-            with open(knowledge_index_path, 'rb') as knowledge_index_file:
-                index_data = pickle.load(knowledge_index_file)
             self.ranker_retriever = EmbRankerRetriever(index_data)
 
     def __init__(self, dataset, tokenizer, special_tokens, args, inference=False):

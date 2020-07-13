@@ -2,8 +2,12 @@ from scipy import spatial
 from nltk.tokenize import word_tokenize
 import nltk
 import numpy as np
-from keras.preprocessing.text import Tokenizer
 
+score_dict = {
+    'NN': 10,
+    'JJ': 10,
+    'VB': 5,
+}
 
 
 def load_embeddings():
@@ -29,28 +33,27 @@ def load_embeddings():
 
 class GloveUtils:
     def __init__(self, data):
-        # Tokenize the sentences
-        self.tokenizer = Tokenizer()
-        # preparing vocabulary
-        self.vocab = set()
+        self.tokenizer = {}
+        count = 0
         for sentence in data:
             words = word_tokenize(sentence)
             for word in words:
-                self.vocab.add(word.lower())
+                if word.lower() not in self.tokenizer:
+                    self.tokenizer[word.lower()] = count
+                    count += 1
         self.embeddings_index = load_embeddings()
-        self.tokenizer.fit_on_texts(list(self.vocab))
         self.embedding_matrix = self.make_embedding_matrix()
 
     def make_embedding_matrix(self):
         # create a weight matrix for words in training docs
-        embedding_matrix = np.zeros((len(self.vocab) + 1, 300))
-        did_not_find = []
-        for word, i in self.tokenizer.word_index.items():
+        embedding_matrix = np.zeros((len(self.tokenizer), 300))
+        # did_not_find = []
+        for word, i in self.tokenizer.items():
             embedding_vector = self.embeddings_index.get(word)
             if embedding_vector is not None:
                 embedding_matrix[i] = embedding_vector
-            else:
-                did_not_find.append(word)
+            # else:
+            #     did_not_find.append(word)
         return embedding_matrix
 
 
@@ -65,7 +68,7 @@ def get_sentence_glove_embedding(sentence, embedding_matrix, tokenizer):
     arr = np.zeros(300)
     count = 0
     for word in sentence:
-        index = tokenizer.word_index.get(word)
+        index = tokenizer.get(word)
         score = score_pos(pos[count][1])
         if index is not None:
             arr = arr + (score * embedding_matrix[index])
@@ -82,16 +85,10 @@ def get_max_cosine_similarity(message, knowledge_list, embedding_matrix, tokeniz
         if sim > max_sim:
             max_sim = sim
             max_sim_fact = element[0]
-    # print("S: ", str(max_sim))
     return max_sim_fact, max_sim
 
 
 def score_pos(pos):
-    if pos == 'NN':
-        return 10
-    elif pos == 'JJ':
-        return 10
-    elif pos == 'VB':
-        return 5
-    else:
-        return 1
+    if pos in score_dict:
+        return score_dict[pos]
+    return 1

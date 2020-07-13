@@ -367,8 +367,7 @@ def train():
                         choices=["dstc9", "topical-chats"])
     
     parser.add_argument('--knowledge_index_path', type=str, default="./tc_processed/tc_knowledge_sent_embs.pkl",
-                        help="Path to knowledge index file", choices=["./tc_processed/knowledge_index.pkl",
-                                                                      "./tc_processed/tc_knowledge_sent_embs.pkl"])
+                        help="Path to knowledge index file")
     parser.add_argument("--dataset_cache", type=str, default='./dataset_caches', help="Path or url of the dataset cache")
     parser.add_argument("--model_checkpoint", type=str, default="gpt2-medium",
                         help="Path, url or short name of the model")

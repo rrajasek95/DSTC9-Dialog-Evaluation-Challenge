@@ -8,7 +8,6 @@ import torch
 from nltk import word_tokenize
 from sklearn.metrics.pairwise import linear_kernel
 from tqdm import tqdm
-from transformers import GPT2Tokenizer
 from glove.glove_utils import get_max_cosine_similarity
 
 from knowledge_index import extract_fact_set, clean
