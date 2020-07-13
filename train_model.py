@@ -257,6 +257,8 @@ def run_train(model, optimizer, scheduler, train_loader, writer, step_counter, a
         )
         loss = (lm_loss * args.lm_coef + mc_loss * args.mc_coef) / args.gradient_accumulation_steps
 
+        if loss.shape[-1] > 1:
+            loss = loss.sum()
         # Average loss across all items in the batch
         running_loss.add(float(loss))
 
@@ -404,6 +406,8 @@ def train():
                         help="Set to O0, O1, O2 or O3 for fp16 training (see apex documentation)")
     parser.add_argument("--local_rank", type=int, default=-1,
                         help="Local rank for distributed training (-1: not distributed)")
+    parser.add_argument('--parallel', action="store_true",
+                        help="Set up data parallelism for training")
     parser.add_argument('--log_dir', type=str, default="runs/",
                         help="Output log directory for summary")
     parser.add_argument('--experiment_name', type=str, default="topical_chats_gpt2",
@@ -442,8 +446,14 @@ def train():
     loaders = get_data_loaders_optimized(args, tokenizer)
     train_loader, _, _, _ = loaders
 
-    # Load the model after the tokenizer. We hit an OOM error if we try to pre-load the model
-    model_class = GPT2DoubleHeadsModel
+    if args.distributed or args.parallel:
+        # Gradient checkpointing significantly slows down distributed training,
+        # so we use the original variant of the class for training
+        import transformers.modeling_gpt2 as mgpt2
+        model_class = mgpt2.GPT2DoubleHeadsModel
+    else:
+        # Load the model after the tokenizer. We hit an OOM error if we try to pre-load the model
+        model_class = GPT2DoubleHeadsModel
 
     # Hack to evaluate model in the way we saved. TODO: Fix this today
     if os.path.isdir(args.model_checkpoint):
@@ -451,11 +461,16 @@ def train():
         model = data["mymodel"]
     else:
         model = model_class.from_pretrained(args.model_checkpoint)
-    model.to(args.device)
 
     # Add special tokens if they are not already added
     if num_added_tokens > 0:
         model.resize_token_embeddings(new_num_tokens=orig_num_tokens + num_added_tokens)
+
+    if args.parallel:
+        # Setup data parallel version of the model to make
+        # use of multi-GPU
+        model = torch.nn.DataParallel(model)
+    model.to(args.device)
 
     optimizer = AdamW(model.parameters(), lr=args.lr, correct_bias=True)
 
