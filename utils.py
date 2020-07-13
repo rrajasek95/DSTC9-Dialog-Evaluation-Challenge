@@ -171,13 +171,7 @@ def process_split(dataset_path, split, tokenizer, index, knowledge_policy):
                             knowledge_sentence = available_knowledge[closest_knowledge_index]
                             break
                     else:
-                        knowledge = vec["knowledge_vecs"][conv_id]
-                        fact, sim = get_max_cosine_similarity(clean(sentence), knowledge, vec["emb_matrix"],
-                                                              vec["tokenizer"])
-                        if sim > 0.7:
-                            knowledge_sentence = fact
-                        else:
-                            knowledge_sentence = ""
+                        knowledge_sentence = emb_knowledge_selection(conv_id, sentence, vec)
                         break
                 else:
                     if knowledge_policy == "tf_idf":
@@ -196,6 +190,17 @@ def process_split(dataset_path, split, tokenizer, index, knowledge_policy):
                 context = context + [current_turn_data]
 
     return data
+
+
+def emb_knowledge_selection(conv_id, sentence, vec):
+    knowledge = vec["knowledge_vecs"][conv_id]
+    fact, sim = get_max_cosine_similarity(clean(sentence), knowledge, vec["emb_matrix"],
+                                          vec["tokenizer"])
+    if sim > 0.7:
+        knowledge_sentence = fact
+    else:
+        knowledge_sentence = ""
+    return knowledge_sentence
 
 
 def augmented_tc_dataset(tokenizer, dataset_path, dataset_cache, knowledge_index_path, dialog_act, knowledge_policy):
