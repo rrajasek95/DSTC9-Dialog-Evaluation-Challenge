@@ -404,6 +404,8 @@ def train():
                         help="Set to O0, O1, O2 or O3 for fp16 training (see apex documentation)")
     parser.add_argument("--local_rank", type=int, default=-1,
                         help="Local rank for distributed training (-1: not distributed)")
+    parser.add_argument('--parallel', action="store_true",
+                        help="Set up data parallelism for training")
     parser.add_argument('--log_dir', type=str, default="runs/",
                         help="Output log directory for summary")
     parser.add_argument('--experiment_name', type=str, default="topical_chats_gpt2",
@@ -442,7 +444,7 @@ def train():
     loaders = get_data_loaders_optimized(args, tokenizer)
     train_loader, _, _, _ = loaders
 
-    if args.distributed:
+    if args.distributed or args.parallel:
         # Gradient checkpointing significantly slows down distributed training,
         # so we use the original variant of the class for training
         import transformers.modeling_gpt2 as mgpt2
@@ -457,6 +459,11 @@ def train():
         model = data["mymodel"]
     else:
         model = model_class.from_pretrained(args.model_checkpoint)
+
+    if args.parallel:
+        # Setup data parallel version of the model to make
+        # use of multi-GPU
+        model = torch.nn.DataParallel(model)
     model.to(args.device)
 
     # Add special tokens if they are not already added
