@@ -5,10 +5,12 @@ import pickle
 from collections import defaultdict
 from itertools import chain
 
+import redis
 import torch
 import torch.nn.functional as F
 import tornado.ioloop
 import tornado.web
+import tornado.httpserver
 from tornado_swagger.setup import setup_swagger
 
 from transformers import GPT2Tokenizer, GPT2LMHeadModel
@@ -87,11 +89,10 @@ class CruzControlHandler(tornado.web.RequestHandler):
         else:
             encoded_knowledge = self.tokenizer.encode(knowledge)
 
-        self.truncate_sequences(turn_history, encoded_knowledge)
-
-        instance = self.build_input_from_segments(turn_history, [], encoded_knowledge, self.tokenizer)
+        truncated_history, encoded_knowledge = self.truncate_sequences(turn_history, encoded_knowledge)
+        instance = self.build_input_from_segments(truncated_history, [], encoded_knowledge, self.tokenizer)
         input_ids = instance["input_ids"]
-        print(self.tokenizer.decode(input_ids))
+        self.logger.info(self.tokenizer.decode(input_ids))
 
         token_type_ids = instance["token_type_ids"]
 
@@ -125,13 +126,15 @@ class CruzControlHandler(tornado.web.RequestHandler):
         turn_history.append(current_output)
         return self.tokenizer.decode(current_output)
 
-
-
-    def initialize(self, args, logger, ranker_retriever,
+    def initialize(self, args, redis_client,
+                   logger,
+                   ranker_retriever,
                    model,
                    tokenizer,
                    dialog_states,
                    special_tokens):
+        self.redis_client = redis_client
+        self.session_expiry = args.session_expiry
         self.max_history = args.max_history
         self.max_fact_length = args.max_fact_length
         self.max_length = args.max_length
@@ -196,14 +199,23 @@ class CruzControlHandler(tornado.web.RequestHandler):
                                         description: The output utterance produced by the model
         """
         body = json.loads(self.request.body.decode())
-        self.logger.info("Received request: ", body)
+        self.logger.info(f"Received request: {body}")
 
-        user_dialog_state = self.dialog_states[body["userID"]]
+        # Dialog states
+        user_session_key = f'user:{body["userID"]}'
+        state_data = self.redis_client.get(user_session_key)
+        if state_data:
+            user_dialog_state = json.loads(state_data)
+        else:
+            user_dialog_state = defaultdict(list)
+
+        # user_dialog_state = self.dialog_states[body["userID"]]
 
         message = body["text"]
 
         response = self._reply(user_dialog_state, message)
 
+        self.redis_client.set(user_session_key, json.dumps(user_dialog_state), ex=self.session_expiry)
         self.write(json.dumps({
             "body": {"utterance": response}
         }))
@@ -229,6 +241,9 @@ def _load_model(args):
     return model, tokenizer
 
 def make_app(args, logger):
+
+    redis_client = redis.Redis(host=args.redis_host, port=args.redis_port, db=0)
+
     index = _load_knowledge_index(args.knowledge_index_path)
     ranker_retriever = TfIdfRankerRetriever(index, new_index=True)
     model, tokenizer = _load_model(args)
@@ -236,6 +251,7 @@ def make_app(args, logger):
 
     routes = [
         tornado.web.url(r"/", CruzControlHandler, dict(args=args,
+                                        redis_client=redis_client,
                                         logger=logger,
                                         ranker_retriever=ranker_retriever,
                                         model=model,
@@ -254,6 +270,11 @@ if __name__ == '__main__':
 
     parser.add_argument('--port', type=int, default=8089,
                         help='Port for the server')
+    parser.add_argument('--redis_host', type=str, default="localhost",
+                        help="Hostname for Redis instance")
+    parser.add_argument('--redis_port', type=int, default=6379)
+    parser.add_argument('--session_expiry', type=int, default=43200,
+                        help="Time after which to purge a session (in seconds)")
 
     parser.add_argument('--model_configuration',
                         default='baseline',
