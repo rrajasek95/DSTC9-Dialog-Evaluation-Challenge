@@ -28,6 +28,7 @@ sentence planning model.
 import argparse
 import logging
 import os
+import pickle
 import sys
 from collections import defaultdict
 from itertools import chain
@@ -75,7 +76,7 @@ UNK = Dataset.UNK
 def load_discriminator(args):
 
     logger.info("Loading the Discriminative BiLSTM-CRF model")
-    checkpoint = torch.load(DISCRIMINATOR_MODELS_PARAMS["path"], pickle_module=dill, map_location=args.device)
+    checkpoint = torch.load(DISCRIMINATOR_MODELS_PARAMS["path"], pickle_module=pickle, map_location=args.device)
     fields = checkpoint["fields"]
     model_opt = checkpoint["opt"]
 
@@ -156,7 +157,7 @@ def top_k_filter(logits, k, probs=False):
         return torch.where(logits < batch_mins, torch.ones_like(logits) * -BIG_CONST, logits)
 
 def get_loader(args, tokenizer):
-    topical_chat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache)
+    topical_chat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache, args.training_configuration)
 
     splits = list(topical_chat.keys())
     for split in splits:
@@ -262,12 +263,12 @@ def perturb_past(past, model, last, unpert_past, unpert_logits, accumulated_hidd
         conversation = [[tokens]]
         print("Tokens: ", conversation)
         print(classifier_fields["conversation"].process(conversation, device=device))
-        # x, conv_seq, _len, utt_len = classifier_fields["conversation"].process(conversation, device=device)
+        x, _len, utt_len = classifier_fields["conversation"].process(conversation, device=device)
         preds, logits = classifier(x, utt_len)
 
-        label = torch.tensor(preds.shape[0] * [class_label], device=device, dtype=torch.long)
-
-        discrim_loss = CrossEntropyLoss()(preds, label)
+        logits = logits.squeeze(0)
+        label = torch.tensor(logits.shape[0] * [class_label], device=device, dtype=torch.long)
+        discrim_loss = CrossEntropyLoss()(logits, label)
         print(" PPLM discrim loss:", discrim_loss.data.cpu().numpy())
         #
 
@@ -292,7 +293,15 @@ def perturb_past(past, model, last, unpert_past, unpert_logits, accumulated_hidd
         loss.backward()
 
         # TODO: Calculate gradient norms
-
+        if grad_norms is not None:
+            grad_norms = [
+                torch.max(grad_norms[index], torch.norm(p_.grad * window_mask))
+                for index, p_ in enumerate(curr_perturbation)
+            ]
+        else:
+            grad_norms = [
+                (torch.norm(p_.grad * window_mask) + SMALL_CONST) for index, p_ in enumerate(curr_perturbation)
+            ]
         # Normalize gradients
         grad = [
             -stepsize * (p_.grad * window_mask / grad_norms[index]**gamma).data.cpu().numpy()
@@ -312,10 +321,10 @@ def perturb_past(past, model, last, unpert_past, unpert_logits, accumulated_hidd
             new_past.append(p_.detach())
         past = new_past
 
-        grad_accumulator = [torch.from_numpy(p_).requires_grad_(True).to(device=device) for p_ in grad_accumulator]
-        pert_past = list(map(add, past, grad_accumulator))
+    grad_accumulator = [torch.from_numpy(p_).requires_grad_(True).to(device=device) for p_ in grad_accumulator]
+    pert_past = list(map(add, past, grad_accumulator))
 
-        return pert_past, new_accumulated_hidden, grad_norms, loss_per_iter
+    return pert_past, new_accumulated_hidden, grad_norms, loss_per_iter
 
 def generate_text_pplm(model, tokenizer,
                        context=None,
@@ -365,92 +374,92 @@ def generate_text_pplm(model, tokenizer,
             if output_so_far.shape[1] > 1:
                 _, past, _ = model(output_so_far[:, :-1])
 
-            unpert_logits, unpert_past, unpert_all_hidden = model(output_so_far)
-            unpert_last_hidden = unpert_all_hidden[-1]
+        unpert_logits, unpert_past, unpert_all_hidden = model(output_so_far)
+        unpert_last_hidden = unpert_all_hidden[-1]
 
-            # Check if we're above grad max length
-            if i >= grad_length:
-                current_stepsize = stepsize * 0
+        # Check if we're above grad max length
+        if i >= grad_length:
+            current_stepsize = stepsize * 0
+        else:
+            current_stepsize = stepsize
+
+        # Modify the past if necessary
+        if not perturb or num_iterations == 0:
+            pert_past = past
+        else:
+            accumulated_hidden = unpert_last_hidden[:, :-1, :]
+            accumulated_hidden = torch.sum(accumulated_hidden, dim=1)
+
+            if past is not None:
+                pert_past, _, grad_norms, loss_this_iter = perturb_past(
+                    past,
+                    model,
+                    last,
+                    unpert_past=unpert_past,
+                    unpert_logits=unpert_logits,
+                    accumulated_hidden=accumulated_hidden,
+                    grad_norms=grad_norms,
+                    stepsize=current_stepsize,
+                    classifier=classifier,
+                    classifier_fields=classifier_fields,
+                    class_label=class_label,
+                    num_iterations=num_iterations,
+                    horizon_length=horizon_length,
+                    window_length=window_length,
+                    decay=decay,
+                    gamma=gamma,
+                    kl_scale=kl_scale,
+                    device=device,
+                    tokenizer=tokenizer
+                )
+
+                loss_in_time.append(loss_this_iter)
             else:
-                current_stepsize = stepsize
-
-            # Modify the past if necessary
-            if not perturb or num_iterations == 0:
                 pert_past = past
+
+        pert_logits, past, pert_all_hidden = model(last, past=pert_past)
+        pert_logits = pert_logits[:, -1, :] / temperature
+
+        for token_idx in set(output_so_far[0].tolist()):
+            if pert_logits[0, token_idx] < 0:
+                pert_logits[0, token_idx] *= repetition_penalty
             else:
-                accumulated_hidden = unpert_last_hidden[:, :-1, :]
-                accumulated_hidden = torch.sum(accumulated_hidden, dim=1)
+                pert_logits[0, token_idx] /= repetition_penalty
 
-                if past is not None:
-                    pert_past, _, grad_norms, loss_this_iter = perturb_past(
-                        past,
-                        model,
-                        last,
-                        unpert_past=unpert_past,
-                        unpert_logits=unpert_logits,
-                        accumulated_hidden=accumulated_hidden,
-                        grad_norms=grad_norms,
-                        stepsize=current_stepsize,
-                        classifier=classifier,
-                        classifier_fields=classifier_fields,
-                        class_label=class_label,
-                        num_iterations=num_iterations,
-                        horizon_length=horizon_length,
-                        window_length=window_length,
-                        decay=decay,
-                        gamma=gamma,
-                        kl_scale=kl_scale,
-                        device=device,
-                        tokenizer=tokenizer
-                    )
+        pert_probs = F.softmax(pert_logits, dim=-1)
 
-                    loss_in_time.append(loss_this_iter)
-                else:
-                    pert_past = past
+        # TODO: Fill this in
+        if classifier is not None:
+            pass
+            # Compute loss of predicted dialog act
+            # this is done by converting the decoded output into a field
+        else:
+            unpert_discrim_loss = 0
 
-            pert_logits, past, pert_all_hidden = model(last, past=pert_past)
-            pert_logits = pert_logits[:, -1, :] / temperature
+        if perturb:
 
-            for token_idx in set(output_so_far[0].tolist()):
-                if pert_logits[0, token_idx] < 0:
-                    pert_logits[0, token_idx] *= repetition_penalty
-                else:
-                    pert_logits[0, token_idx] /= repetition_penalty
+            unpert_probs = F.softmax(unpert_logits[:, -1, :], dim=1)
 
+            pert_probs = (pert_probs ** gm_scale) * (unpert_probs ** (1 - gm_scale))
+            pert_probs = top_k_filter(pert_probs, k=top_k, probs=True)
+
+            # Rescale
+            if torch.sum(pert_probs) <= 1:
+                pert_probs = pert_probs / torch.sum(pert_probs)
+        else:
+            pert_logits = top_k_filter(pert_logits, k=top_k)
             pert_probs = F.softmax(pert_logits, dim=-1)
 
-            # TODO: Fill this in
-            if classifier is not None:
-                pass
-                # Compute loss of predicted dialog act
-                # this is done by converting the decoded output into a field
-            else:
-                unpert_discrim_loss = 0
+        if sample:
+            last = torch.multinomial(pert_probs, num_samples=1)
 
-            if perturb:
+        else:
+            _, last = torch.topk(pert_probs, k=1, dim=-1)
 
-                unpert_probs = F.softmax(unpert_logits[:, -1, :], dim=1)
+        # update context/output_so_far appending the new token
+        output_so_far = last if output_so_far is None else torch.cat((output_so_far, last), dim=1)
 
-                pert_probs = (pert_probs ** gm_scale) * (unpert_probs ** (1 - gm_scale))
-                pert_probs = top_k_filter(pert_probs, k=top_k, probs=True)
-
-                # Rescale
-                if torch.sum(pert_probs) <= 1:
-                    pert_probs = pert_probs / torch.sum(pert_probs)
-            else:
-                pert_logits = top_k_filter(pert_logits, k=top_k)
-                pert_probs = F.softmax(pert_logits, dim=-1)
-
-            if sample:
-                last = torch.multinomial(pert_probs, num_samples=1)
-
-            else:
-                _, last = torch.topk(pert_probs, k=1, dim=-1)
-
-            # update context/output_so_far appending the new token
-            output_so_far = last if output_so_far is None else torch.cat((output_so_far, last), dim=1)
-
-            print(tokenizer.decode(output_so_far.tolist()[0]))
+        print(tokenizer.decode(output_so_far.tolist()[0]))
 
     return output_so_far, unpert_discrim_loss, loss_in_time
 
@@ -518,9 +527,12 @@ def run_pplm_da(args):
     discriminator, fields = load_discriminator(args)
 
     # Load GPT2 model
-    model = GPT2LMHeadModel.from_pretrained(args.model_checkpoint, output_hidden_states=True)
-    model.to(args.device)
-    model.eval()
+    data = torch.load(args.model_checkpoint + '/pytorch_model.bin')
+    model = data["mymodel"]
+
+    model = GPT2LMHeadModel.from_pretrained(args.model_checkpoint, output_hidden_states=True, state_dict=model.state_dict())
+    # model.to(args.device)
+    # model.eval()
 
     tokenizer = GPT2Tokenizer.from_pretrained(args.model_checkpoint)
 
@@ -587,6 +599,8 @@ if __name__ == '__main__':
     # LM args
     parser.add_argument("--dataset_path", type=str, default="processed_output",
                         help="Path or url of the dataset. If empty download from S3.")
+    parser.add_argument('--training_configuration', type=str, default="baseline",
+                        help="Training configuration to make use of")
     parser.add_argument('--dataset_cache', type=str, default='./dataset_cache', help='Path or url of the dataset cache')
 
     parser.add_argument('--model_checkpoint',
