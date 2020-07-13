@@ -297,12 +297,76 @@ class KnowledgeDependent(DialogPolicy):
             return action, ""
 
 
+class KnowledgeIndependentSWBDPolicy(DialogPolicy):
+    def __init__(self):
+        self.include_knowledge = {
+            STATEMENT_NON_OPINION: True,
+            STATEMENT_OPINION: True,
+            YES_NO_QUESTION: True,
+            APPRECIATION: False,
+            WH_QUESTION: True,
+            CONVENTIONAL_CLOSING: False,
+            OPEN_QUESTION: True,
+            CONVENTIONAL_OPENING: False,
+            DECLARATIVE_WH_QUESTION: True,
+            AGREE_ACCEPT: False,
+            ACTION_DIRECTIVE: False,
+            BACKCHANNEL_IN_QUESTION_FORM: False,
+            SIGNAL_NON_UNDERSTANDING: False,
+            HEDGE: False,
+            DECLARATIVE_YES_NO_QUESTION: True,
+            NEGATIVE_NON_NO_ANSWERS: False,
+            OR_CLAUSE: False,
+            AFFIRMATIVE_NON_YES_ANSWERS: False,
+            REJECT: False,
+            OTHER_ANSWERS: False,
+            SUMMARIZE: False,
+            YES_ANSWERS: False,
+            DOWNPLAYER: False,
+            RHETORICAL_QUESTIONS: True,
+            HOLD_BEFORE_ANSWER: False,
+            ACKNOWLEDGE: False,
+            NO_ANSWERS: False,
+            OTHER: False,
+            APOLOGY: False,
+            NO_DIALOGUE_ACT: True
+        }
+
+    def _get_action_space(self, dialog_state):
+        da_history = dialog_state["da_history"]
+
+        if len(da_history) == 0:
+            acts = [[CONVENTIONAL_OPENING, STATEMENT_NON_OPINION], [CONVENTIONAL_OPENING, OPEN_QUESTION]]
+            weights = [0.5, 0.5]
+        else:
+            weights = [1.0]
+            if da_history[-1] == CONVENTIONAL_OPENING:
+                acts = [[CONVENTIONAL_OPENING, STATEMENT_OPINION]]
+            elif da_history[-1] == CONVENTIONAL_CLOSING:
+                acts = [[CONVENTIONAL_CLOSING, STATEMENT_OPINION]]
+            elif da_history[-1] == THANKING:
+                acts = [[STATEMENT_OPINION, CONVENTIONAL_CLOSING]]
+            elif da_history[-1] == HEDGE:
+                acts = [[STATEMENT_OPINION, YES_NO_QUESTION]]
+            elif da_history[-1] == OTHER_ANSWERS:
+                acts = [[STATEMENT_NON_OPINION, YES_NO_QUESTION]]
+            elif da_history[-1] == RHETORICAL_QUESTIONS:
+                acts = [[STATEMENT_OPINION, YES_NO_QUESTION]]
+            else:
+                acts = [[STATEMENT_NON_OPINION, STATEMENT_OPINION]]
+
+        return acts, weights
+
+    def _includes_knowledge(self, act):
+        return self.include_knowledge.get(act, False)
+
+
 if __name__ == '__main__':
     dialog_state = {
         "knowledge": "Blah",
-        "da_history": [STATEMENT],
+        "da_history": [CONVENTIONAL_CLOSING],
         "knowledge_history": [""]
     }
-    kd_policy = KnowledgeDependent()
+    kd_policy = KnowledgeIndependentSWBDPolicy()
 
     print(kd_policy.get_knowledge_grounded_action(dialog_state))
