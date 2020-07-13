@@ -228,7 +228,7 @@ def _load_model(args):
     if args.model_checkpoint in ["gpt2-medium", "gpt2-large"]:
         model = GPT2LMHeadModel.from_pretrained(args.model_checkpoint)
     else:
-        data = torch.load(args.model_checkpoint + "/pytorch_model.bin")
+        data = torch.load(args.model_checkpoint + "/pytorch_model.bin",map_location=args.device)
         model = data["mymodel"]
         model = GPT2LMHeadModel.from_pretrained(args.model_checkpoint, state_dict=model.state_dict())
     model.to(args.device)

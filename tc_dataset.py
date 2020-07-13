@@ -6,9 +6,9 @@ from torch.utils.data import Dataset
 
 from pd_nrg.policies import KnowledgeDependent
 
-from sklearn.metrics.pairwise import linear_kernel
 
 from pd_nrg.ranker import TfIdfRankerRetriever
+from pd_nrg.ranker import EmbRankerRetriever
 
 
 class TopicalChatsDataset(Dataset):
@@ -19,6 +19,7 @@ class TopicalChatsDataset(Dataset):
     I wonder if there are other optimization opportunities
     - Rishi
     """
+
     def __init__(self, dataset, tokenizer, special_tokens, args):
         self.dataset = dataset
         self.tokenizer = tokenizer
@@ -107,11 +108,13 @@ class TopicalChatsDataset(Dataset):
 
 
 class TopicalChatsKDDataset(TopicalChatsDataset):
-    def _init_knowledge_index(self, knowledge_index_path):
+    def _init_knowledge_index(self, knowledge_index_path, knowledge_policy):
         with open(knowledge_index_path, 'rb') as knowledge_index_file:
             index_data = pickle.load(knowledge_index_file)
-        self.ranker_retriever = TfIdfRankerRetriever(index_data)
-
+        if knowledge_policy == "tf_idf":
+            self.ranker_retriever = TfIdfRankerRetriever(index_data)
+        else:
+            self.ranker_retriever = EmbRankerRetriever(index_data)
 
     def __init__(self, dataset, tokenizer, special_tokens, args, inference=False):
         self.dialog_policy = KnowledgeDependent()
@@ -120,7 +123,7 @@ class TopicalChatsKDDataset(TopicalChatsDataset):
         # heuristic dialog policy and knowledge selection policy
         self.inference = inference
         if self.inference:
-            self._init_knowledge_index(args.knowledge_index_path)
+            self._init_knowledge_index(args.knowledge_index_path, args.knowledge_policy)
         self.dataset_configuration = args.dataset_configuration
         super().__init__(dataset, tokenizer, special_tokens, args)
 
@@ -165,7 +168,6 @@ class TopicalChatsKDDataset(TopicalChatsDataset):
             else:
                 return ""
 
-
     def _execute_heuristic_policy(self, dialog_state):
         knowledge = self._select_appropriate_knowledge(dialog_state)
         dialog_state["knowledge"] = knowledge  # Augment dialog state with knowledge
@@ -189,7 +191,7 @@ class TopicalChatsKDDataset(TopicalChatsDataset):
         candidates = self.sample_candidates(self.dataset, index)
         candidates.append(response)
         if self.dataset_configuration != "dstc9":
-            encoded_das = self.tokenizer.encode([f"<{da['label']}>" for da in mezza_das])
+            encoded_das = self.tokenizer.encode([f"<{da['da']}>" for da in mezza_das])
         else:
             encoded_das = mezza_das
         instances = []

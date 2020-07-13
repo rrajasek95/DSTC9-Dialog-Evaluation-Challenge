@@ -209,7 +209,7 @@ def get_data_loaders_optimized(args, tokenizer):
     else:
         dact_scheme = "mezza_da" if args.training_configuration == "kd-pd-nrg" else "switchboard_da"
         topical_chat = augmented_tc_dataset(tokenizer, args.dataset_path, args.dataset_cache,
-                                            args.knowledge_index_path, dact_scheme)
+                                            args.knowledge_index_path, dact_scheme, args.knowledge_policy)
 
     if args.training_configuration == "baseline":
         train_dataset, valid_dataset = TopicalChatsDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), \
@@ -361,14 +361,14 @@ def train():
 
     parser.add_argument("--dataset_path", type=str, default="processed_output",
                         help="Path or url of the dataset. If empty download from S3.")
-    parser.add_argument('--training_configuration', type=str, default="baseline",
+    parser.add_argument('--training_configuration', type=str, default="kd-pd-nrg",
                         help="Training configuration to run",
                         choices=["baseline", "kd-pd-nrg", "kd-pd-nrg-swbd"])
-    parser.add_argument('--dataset_configuration', type=str, default="dstc9",
+    parser.add_argument('--dataset_configuration', type=str, default="topical-chats",
                         help="Configuration of dataset to load for training",
                         choices=["dstc9", "topical-chats"])
     
-    parser.add_argument('--knowledge_index_path', type=str, default="./tc_processed/knowledge_index.pkl",
+    parser.add_argument('--knowledge_index_path', type=str, default="./tc_processed/tc_knowledge_sent_embs.pkl",
                         help="Path to knowledge index file")
     parser.add_argument("--dataset_cache", type=str, default='./dataset_caches', help="Path or url of the dataset cache")
     parser.add_argument("--model_checkpoint", type=str, default="gpt2-medium",
@@ -419,6 +419,7 @@ def train():
                         help="Nucleus filtering (top-p) before sampling (<=0.0: no filtering)")
     parser.add_argument("--no_sample", action='store_true', help="Set to use greedy decoding instead of sampling")
     parser.add_argument("--max_length", type=int, default=20, help="Maximum length of the output utterances")
+    parser.add_argument("--knowledge_policy", type=str, default="embeddings", choices=["tf_idf", "embeddings"])
     args = parser.parse_args()
 
     # logging is set to INFO (resp. WARN) for main (resp. auxiliary) process. logger.info => log main process only, logger.warning => log all processes
