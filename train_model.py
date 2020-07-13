@@ -442,8 +442,14 @@ def train():
     loaders = get_data_loaders_optimized(args, tokenizer)
     train_loader, _, _, _ = loaders
 
-    # Load the model after the tokenizer. We hit an OOM error if we try to pre-load the model
-    model_class = GPT2DoubleHeadsModel
+    if args.distributed:
+        # Gradient checkpointing significantly slows down distributed training,
+        # so we use the original variant of the class for training
+        import transformers.modeling_gpt2 as mgpt2
+        model_class = mgpt2.GPT2DoubleHeadsModel
+    else:
+        # Load the model after the tokenizer. We hit an OOM error if we try to pre-load the model
+        model_class = GPT2DoubleHeadsModel
 
     # Hack to evaluate model in the way we saved. TODO: Fix this today
     if os.path.isdir(args.model_checkpoint):
