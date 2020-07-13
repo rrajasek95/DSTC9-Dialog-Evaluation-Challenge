@@ -258,7 +258,7 @@ def run_train(model, optimizer, scheduler, train_loader, writer, step_counter, a
         loss = (lm_loss * args.lm_coef + mc_loss * args.mc_coef) / args.gradient_accumulation_steps
 
         # Average loss across all items in the batch
-        running_loss.add(float(loss))
+        running_loss.add(float(loss.sum()))
 
         if args.fp16:
             with amp.scale_loss(loss, optimizer) as scaled_loss:
@@ -460,15 +460,15 @@ def train():
     else:
         model = model_class.from_pretrained(args.model_checkpoint)
 
+    # Add special tokens if they are not already added
+    if num_added_tokens > 0:
+        model.resize_token_embeddings(new_num_tokens=orig_num_tokens + num_added_tokens)
+
     if args.parallel:
         # Setup data parallel version of the model to make
         # use of multi-GPU
         model = torch.nn.DataParallel(model)
     model.to(args.device)
-
-    # Add special tokens if they are not already added
-    if num_added_tokens > 0:
-        model.resize_token_embeddings(new_num_tokens=orig_num_tokens + num_added_tokens)
 
     optimizer = AdamW(model.parameters(), lr=args.lr, correct_bias=True)
 
