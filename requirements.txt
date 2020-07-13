@@ -40,9 +40,9 @@ kiwisolver==1.2.0
 langdetect==1.0.8
 Markdown==3.2.2
 matplotlib
-mkl-fft==1.1.0
-mkl-random==1.1.1
-mkl-service==2.3.0
+# mkl-fft==1.1.0
+# mkl-random==1.1.1
+# mkl-service==2.3.0
 more-itertools==8.4.0
 mpld3==0.3
 msgpack==0.5.6
