@@ -4,7 +4,6 @@
 import argparse
 import json
 import os
-import pickle
 import string
 import glove.glove_utils
 from glove.glove_utils import get_sentence_glove_embedding

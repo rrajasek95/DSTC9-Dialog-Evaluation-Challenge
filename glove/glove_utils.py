@@ -1,18 +1,9 @@
 from scipy import spatial
 from nltk.tokenize import word_tokenize
 import nltk
-import json
-import os
 import numpy as np
-import csv
 from keras.preprocessing.text import Tokenizer
-from keras.preprocessing.sequence import pad_sequences
-from collections import OrderedDict
-import random
-from sklearn.metrics import classification_report
-from sklearn.metrics import confusion_matrix
-import pandas as pd
-import matplotlib.pyplot as plt
+
 
 
 def load_embeddings():
