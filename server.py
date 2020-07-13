@@ -9,6 +9,8 @@ import torch
 import torch.nn.functional as F
 import tornado.ioloop
 import tornado.web
+from tornado_swagger.setup import setup_swagger
+
 from transformers import GPT2Tokenizer, GPT2LMHeadModel
 
 from pd_nrg.ranker import TfIdfRankerRetriever
@@ -151,6 +153,48 @@ class CruzControlHandler(tornado.web.RequestHandler):
         self.logger = logger
 
     def post(self):
+        """
+        ---
+        tags:
+        - Reply
+
+        summary: Send message to the server
+        description: Send a message as the specified user. This creates a session if one is not present already.
+        consumes:
+        - application/json
+
+        parameters:
+        -   in: body
+            name: message
+            description: The message request for the user
+            schema:
+                type: object
+                required:
+                - userID
+                - text
+
+                properties:
+                    userID:
+                        type: string
+                    text:
+                        type: string
+        produces:
+        - application/json
+        responses:
+            '200':
+                description: A response object
+                content:
+                    application/json:
+                    schema:
+                        type: object
+                        properties:
+                            body:
+                                type: object
+                                properties:
+                                    utterance:
+                                        type: string
+                                        description: The output utterance produced by the model
+        """
         body = json.loads(self.request.body.decode())
         self.logger.info("Received request: ", body)
 
@@ -190,15 +234,19 @@ def make_app(args, logger):
     model, tokenizer = _load_model(args)
     dialog_states = defaultdict(lambda: defaultdict(list))
 
-    return tornado.web.Application([
-        (r"/", CruzControlHandler, dict(args=args,
+    routes = [
+        tornado.web.url(r"/", CruzControlHandler, dict(args=args,
                                         logger=logger,
                                         ranker_retriever=ranker_retriever,
                                         model=model,
                                         tokenizer=tokenizer,
                                         dialog_states=dialog_states,
                                         special_tokens=SPECIAL_TOKENS))
-    ])
+    ]
+
+    setup_swagger(routes)
+
+    return tornado.web.Application(routes)
 
 
 if __name__ == '__main__':

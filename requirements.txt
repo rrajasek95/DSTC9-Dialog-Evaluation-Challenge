@@ -113,3 +113,4 @@ Werkzeug==1.0.1
 wrapt==1.10.11
 xdg==4.0.1
 zipp==3.1.0
+tornado-swagger==1.2.4
