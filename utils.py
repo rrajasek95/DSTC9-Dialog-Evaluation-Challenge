@@ -9,12 +9,14 @@ from nltk import word_tokenize
 from sklearn.metrics.pairwise import linear_kernel
 from tqdm import tqdm
 from transformers import GPT2Tokenizer
+from glove.glove_utils import get_max_cosine_similarity
 
 from knowledge_index import extract_fact_set, clean
 
 CONFIG_NAME = 'config.json'
 
 logger = logging.getLogger(__file__)
+
 
 def load_data(dataset_path, split, training_configuration):
     path_prefix = os.path.join(dataset_path, split)
@@ -35,7 +37,6 @@ def load_data(dataset_path, split, training_configuration):
 
     context = [zip(s, h, k) for (s, h, k) in zip(src, history_da, history_knowledge)]
     return list(zip(context, zip(tgt, resp_da, fct)))
-
 
 
 def get_dataset(tokenizer, dataset_path, dataset_cache, training_configuration):
@@ -68,8 +69,8 @@ def get_dataset(tokenizer, dataset_path, dataset_cache, training_configuration):
         torch.save(dataset, dataset_cache)
     return dataset
 
-def extract_fact_set_mapped(factsets):
 
+def extract_fact_set_mapped(factsets):
     sentences = []
     original_sentences = dict()
     for idx, data in factsets.items():
@@ -97,7 +98,8 @@ def extract_fact_set_mapped(factsets):
             original_sentences[cleaned_sum_wiki] = summarized_wiki
     return original_sentences
 
-def process_split(dataset_path, split, tokenizer, index):
+
+def process_split(dataset_path, split, tokenizer, index, knowledge_policy):
     vec, dialog_act = index
     path_prefix = os.path.join(dataset_path, split)
     reading_set_path = os.path.join(dataset_path, 'reading_sets', f'{split}.json')
@@ -153,43 +155,58 @@ def process_split(dataset_path, split, tokenizer, index):
                 available_knowledge = agent_knowledge[turn["agent"]]
                 for segment in turn["segments"]:
                     sentence = segment["text"]
-                    text_tfidf = vec.transform([clean(sentence)])
-                    """
-                    In this section, we find the knowledge sentence that is closest
-                    to the ground truth response expected from the model.
-                    This is so that the model learns to appropriately condition on
-                    the knowledge
-                    """
-                    knowledge_tfidf = vec.transform(available_knowledge)
+                    if knowledge_policy == "tf_idf":
+                        text_tfidf = vec.transform([clean(sentence)])
+                        """
+                        In this section, we find the knowledge sentence that is closest
+                        to the ground truth response expected from the model.
+                        This is so that the model learns to appropriately condition on
+                        the knowledge
+                        """
+                        knowledge_tfidf = vec.transform(available_knowledge)
 
-                    similarities = linear_kernel(knowledge_tfidf, text_tfidf).flatten()
-                    closest_knowledge_index = similarities.argsort()[-1]
+                        similarities = linear_kernel(knowledge_tfidf, text_tfidf).flatten()
+                        closest_knowledge_index = similarities.argsort()[-1]
 
-                    if similarities[closest_knowledge_index] > 0.3:
-                        knowledge_sentence = available_knowledge[closest_knowledge_index]
+                        if similarities[closest_knowledge_index] > 0.3:
+                            knowledge_sentence = available_knowledge[closest_knowledge_index]
+                            break
+                    else:
+                        knowledge = vec["knowledge_vecs"][conv_id]
+                        fact, sim = get_max_cosine_similarity(clean(sentence), knowledge, vec["emb_matrix"],
+                                                              vec["tokenizer"])
+                        if sim > 0.7:
+                            knowledge_sentence = fact
+                        else:
+                            knowledge_sentence = ""
                         break
                 else:
-                    text_tfidf = vec.transform([clean(response)])
-                    knowledge_tfidf = vec.transform(available_knowledge)
-                    similarities = linear_kernel(knowledge_tfidf, text_tfidf).flatten()
-                    closest_knowledge_index = similarities.argsort()[-1]
+                    if knowledge_policy == "tf_idf":
+                        text_tfidf = vec.transform([clean(response)])
+                        knowledge_tfidf = vec.transform(available_knowledge)
+                        similarities = linear_kernel(knowledge_tfidf, text_tfidf).flatten()
+                        closest_knowledge_index = similarities.argsort()[-1]
 
-                    knowledge_sentence = available_knowledge[closest_knowledge_index] \
-                        if similarities[closest_knowledge_index] > 0.3 else ""
+                        knowledge_sentence = available_knowledge[closest_knowledge_index] \
+                            if similarities[closest_knowledge_index] > 0.3 else ""
 
                 original_knowledge_sentence = agent_mapping[turn["agent"]].get(knowledge_sentence, "")
-                current_turn_data = (tokenizer.encode(response), turn[dialog_act], tokenizer.encode(original_knowledge_sentence))
+                current_turn_data = (
+                tokenizer.encode(response), turn[dialog_act], tokenizer.encode(original_knowledge_sentence))
                 data.append((context, current_turn_data))
                 context = context + [current_turn_data]
 
     return data
 
 
-def augmented_tc_dataset(tokenizer, dataset_path, dataset_cache, knowledge_index_path, dialog_act):
+def augmented_tc_dataset(tokenizer, dataset_path, dataset_cache, knowledge_index_path, dialog_act, knowledge_policy):
     dataset_cache = dataset_cache + '_augmented_' + type(tokenizer).__name__
     with open(knowledge_index_path, 'rb') as knowledge_index_file:
         index_data = pickle.load(knowledge_index_file)
-    vec = index_data["vectorizer"]
+    if knowledge_policy == "tf_idf":
+        vec = index_data["vectorizer"]
+    else:
+        vec = index_data
     if dataset_cache and os.path.isfile(dataset_cache):
         logger.info("Load tokenized dataset from cache at %s", dataset_cache)
         dataset = torch.load(dataset_cache)
@@ -200,12 +217,12 @@ def augmented_tc_dataset(tokenizer, dataset_path, dataset_cache, knowledge_index
 
         dataset = {}
         for split in splits:
-
-            dataset[split] = process_split(dataset_path, split, tokenizer, (vec, dialog_act))
+            dataset[split] = process_split(dataset_path, split, tokenizer, (vec, dialog_act), knowledge_policy)
             logger.info("Processed split %s", split)
         torch.save(dataset, dataset_cache)
 
     return dataset
+
 
 class GlobalStepCounter(object):
     def __init__(self):
@@ -216,6 +233,7 @@ class GlobalStepCounter(object):
 
     def step(self):
         self.num_steps += 1
+
 
 def generate_references_for_split(dataset_path, dataset_cache, split, output_path):
     path_prefix = os.path.join(dataset_path, split)
@@ -231,6 +249,7 @@ def generate_references_for_split(dataset_path, dataset_cache, split, output_pat
     with open(output_path, 'w') as references_file:
         references_file.writelines(responses[:-1])
 
+
 def make_path(path):
     """
     Based off: https://stackoverflow.com/a/600612
@@ -241,6 +260,7 @@ def make_path(path):
     :return:
     """
     os.makedirs(path, exist_ok=True)
+
 
 if __name__ == '__main__':
     pass

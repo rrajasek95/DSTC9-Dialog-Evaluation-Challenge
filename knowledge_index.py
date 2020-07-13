@@ -6,9 +6,15 @@ import json
 import os
 import pickle
 import string
+import glove.glove_utils
+from glove.glove_utils import get_sentence_glove_embedding
+import pickle
 
 from nltk import word_tokenize
+from nltk import sent_tokenize
+
 from sklearn.feature_extraction.text import TfidfVectorizer
+
 
 def load_split_conversation_data(data_file_path, split):
     split_conversation_path = os.path.join(
@@ -22,8 +28,20 @@ def load_split_conversation_data(data_file_path, split):
 
     return split_conv_data
 
-def extract_fact_set(factsets):
 
+def load_json_data(data_file_path, split):
+    split_conversation_path = os.path.join(
+        data_file_path,
+        f'{split}_anno.json'
+    )
+
+    with open(split_conversation_path, 'r') as split_conversation_file:
+        split_conv_data = json.load(split_conversation_file)
+
+    return split_conv_data
+
+
+def extract_fact_set(factsets):
     sentences = []
     for idx, data in factsets.items():
 
@@ -58,26 +76,128 @@ def load_split_reading_set(data_file_path, split):
     return split_reading_set
 
 
-def build_knowledge_set(reading_set):
+def build_knowledge_set(reading_set, knowledge_convo_embs=None, embs=False, emb_matrix=None, tokenizer=None):
     knowledge_set = set()
 
-    for conv_id, data in reading_set.items():
-        knowledge_set.update(extract_fact_set(data["agent_1"]))
-        knowledge_set.update(extract_fact_set(data["agent_2"]))
+    if embs:
+        for conv_id, data in reading_set.items():
+            knowledge_sents = extract_fact_set(data["agent_1"])
+            knowledge_sents += extract_fact_set(data["agent_2"])
 
-        article_data = data["article"]
+            article_data = data["article"]
 
-        article_indices = ['AS1', 'AS2', 'AS3', 'AS4']
+            article_indices = ['AS1', 'AS2', 'AS3', 'AS4']
 
-        # Article information
-        if "AS1" in article_data:
-            for idx in article_indices:
-                sentence = article_data[idx]
-                if len(word_tokenize(sentence)) < 5:
-                    continue
-                knowledge_set.add(clean(sentence))
+            # Article information
+            if "AS1" in article_data:
+                for idx in article_indices:
+                    sentence = article_data[idx]
+                    if len(word_tokenize(sentence)) < 5:
+                        continue
+                    knowledge_sents.append(clean(sentence))
 
-    return knowledge_set
+            knowledge_convo_embs[conv_id] = []
+            for sent in knowledge_sents:
+                knowledge_convo_embs[conv_id].append([sent, get_sentence_glove_embedding(sent, emb_matrix, tokenizer)])
+        return knowledge_convo_embs
+
+    else:
+        for conv_id, data in reading_set.items():
+            knowledge_set.update(extract_fact_set(data["agent_1"]))
+            knowledge_set.update(extract_fact_set(data["agent_2"]))
+
+            article_data = data["article"]
+
+            article_indices = ['AS1', 'AS2', 'AS3', 'AS4']
+
+            # Article information
+            if "AS1" in article_data:
+                for idx in article_indices:
+                    sentence = article_data[idx]
+                    if len(word_tokenize(sentence)) < 5:
+                        continue
+                    knowledge_set.add(clean(sentence))
+
+        return knowledge_set
+
+
+def get_messages(data, corpus):
+    for k, v in data.items():
+        for mes in v["content"]:
+            sents = sent_tokenize(mes["message"])
+            for sent in sents:
+                corpus.append(sent)
+    return corpus
+
+
+def build_topical_chats_knowledge_index_glove(args):
+    data_file_path = os.path.join(
+        args.data_dir,
+        'alexa-prize-topical-chat-dataset',
+    )
+
+    splits = ['train', 'valid_freq', 'valid_rare', 'test_freq', 'test_rare']
+
+    knowledge_set = set()
+
+    for split in splits:
+        split_reading_set = load_split_reading_set(data_file_path, split)
+
+        knowledge_set |= build_knowledge_set(split_reading_set)
+    corpus = sorted(list(knowledge_set), key=lambda x: len(x))
+    all_data = {}
+    for split in splits:
+        data = load_json_data('./tc_processed', split)
+        all_data.update(data)
+
+    corpus = get_messages(all_data, corpus)
+    glove_obj = glove.glove_utils.GloveUtils(corpus)
+
+    knowledge_index_path = os.path.join(args.data_dir,
+                                        'tc_processed',
+                                        'tc_knowledge_index_glove.pkl')
+
+    with open(knowledge_index_path, 'wb') as knowledge_index_file:
+        pickle.dump({
+            "tokenizer": glove_obj.tokenizer,
+            # "knowledge": corpus,
+            "embedding_matrix": glove_obj.embedding_matrix,
+            # "vocab": glove_obj.vocab,
+            # "embeddings_index": glove_obj.embeddings_index
+        }, knowledge_index_file)
+
+
+def build_conversation_knowledge_embeddings(args, glove_embs_path):
+    with open(glove_embs_path, 'rb') as knowledge_index_file:
+        index_data = pickle.load(knowledge_index_file)
+
+    emb_matrix = index_data["embedding_matrix"]
+    tokenizer = index_data["tokenizer"]
+
+    data_file_path = os.path.join(
+        args.data_dir,
+        'alexa-prize-topical-chat-dataset',
+    )
+
+    splits = ['train', 'valid_freq', 'valid_rare', 'test_freq', 'test_rare']
+
+    knowledge_convo_embs = {}
+
+    for split in splits:
+        split_reading_set = load_split_reading_set(data_file_path, split)
+        knowledge_convo_embs = build_knowledge_set(split_reading_set, knowledge_convo_embs=knowledge_convo_embs,
+                                                   embs=True, emb_matrix=emb_matrix, tokenizer=tokenizer)
+
+    knowledge_index_path = os.path.join(args.data_dir,
+                                        'tc_processed',
+                                        'tc_knowledge_sent_embs.pkl')
+
+    with open(knowledge_index_path, 'wb') as knowledge_index_file:
+        pickle.dump({
+            "tokenizer": tokenizer,
+            "emb_matrix": emb_matrix,
+            "knowledge_vecs": knowledge_convo_embs
+        }, knowledge_index_file)
 
 
 def build_topical_chats_knowledge_index(args):
@@ -102,8 +222,8 @@ def build_topical_chats_knowledge_index(args):
     transformed_knowledge_sentences = vectorizer.fit_transform(corpus)
 
     knowledge_index_path = os.path.join(args.data_dir,
-              'tc_processed',
-              'tc_knowledge_index.pkl')
+                                        'tc_processed',
+                                        'tc_knowledge_index.pkl')
 
     with open(knowledge_index_path, 'wb') as knowledge_index_file:
         pickle.dump({
@@ -111,6 +231,7 @@ def build_topical_chats_knowledge_index(args):
             "knowledge": corpus,
             "knowledge_vecs": transformed_knowledge_sentences
         }, knowledge_index_file)
+
 
 """
 Methods derived from the baseline dynamic.py script.
@@ -122,7 +243,7 @@ topical chats!
 
 
 def clean(s):
-  return ''.join([c if c not in string.punctuation else ' ' for c in s.lower()])
+    return ''.join([c if c not in string.punctuation else ' ' for c in s.lower()])
 
 
 def build_tfidf_from_dstc9(args):
@@ -131,8 +252,8 @@ def build_tfidf_from_dstc9(args):
 
     for suffix in ["src", "tgt", "fct"]:
         data_file_path = os.path.join(args.data_dir,
-                     'processed_output',
-                     f"train.{suffix}")
+                                      'processed_output',
+                                      f"train.{suffix}")
 
         with open(data_file_path, "r") as file:
             corpus += [e.strip() for e in file.readlines()]
@@ -143,8 +264,8 @@ def build_tfidf_from_dstc9(args):
     potential_facts = [e for e in potential_facts if len(e.split()) < 20]
 
     index_path = os.path.join(args.data_dir,
-                           'processed_output',
-                           'knowledge_index_dstc9.pkl')
+                              'processed_output',
+                              'knowledge_index_dstc9.pkl')
     with open(index_path, 'wb') as index_file:
         index_dict = {
             "tfidf_vec": vectorizer,
@@ -163,8 +284,13 @@ if __name__ == '__main__':
 
     parser.add_argument('--data_dir', type=str, default='./',
                         help='Directory where the topical chats folder is present')
+
+    parser.add_argument('--knowledge_policy', type=str, default='glove', choices=['glove', 'tf_idf'])
     args = parser.parse_args()
-    if args.dataset_type == "dstc9":
+    if args.knowledge_policy == "glove":
+        # build_topical_chats_knowledge_index_glove(args)
+        build_conversation_knowledge_embeddings(args, 'tc_processed/tc_knowledge_index_glove.pkl')
+    elif args.dataset_type == "dstc9":
         build_tfidf_from_dstc9(args)
     else:
         build_topical_chats_knowledge_index(args)
