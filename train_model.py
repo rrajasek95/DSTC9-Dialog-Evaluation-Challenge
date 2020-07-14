@@ -209,7 +209,7 @@ def get_data_loaders_optimized(args, tokenizer):
     else:
         dact_scheme = "mezza_da" if args.training_configuration == "kd-pd-nrg" else "switchboard_da"
         topical_chat = augmented_tc_dataset(tokenizer, args.dataset_path, args.dataset_cache,
-                                            args.knowledge_index_path, dact_scheme)
+                                            args.knowledge_index_path, dact_scheme, args.knowledge_policy)
 
     if args.training_configuration == "baseline":
         train_dataset, valid_dataset = TopicalChatsDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), \
@@ -256,7 +256,6 @@ def run_train(model, optimizer, scheduler, train_loader, writer, step_counter, a
             mc_labels=mc_labels, lm_labels=lm_labels
         )
         loss = (lm_loss * args.lm_coef + mc_loss * args.mc_coef) / args.gradient_accumulation_steps
-
         # Average loss across all items in the batch
         running_loss.add(float(loss))
 
@@ -359,14 +358,14 @@ def train():
 
     parser.add_argument("--dataset_path", type=str, default="processed_output",
                         help="Path or url of the dataset. If empty download from S3.")
-    parser.add_argument('--training_configuration', type=str, default="baseline",
+    parser.add_argument('--training_configuration', type=str, default="kd-pd-nrg",
                         help="Training configuration to run",
                         choices=["baseline", "kd-pd-nrg", "kd-pd-nrg-swbd"])
-    parser.add_argument('--dataset_configuration', type=str, default="dstc9",
+    parser.add_argument('--dataset_configuration', type=str, default="topical-chats",
                         help="Configuration of dataset to load for training",
                         choices=["dstc9", "topical-chats"])
     
-    parser.add_argument('--knowledge_index_path', type=str, default="./tc_processed/knowledge_index.pkl",
+    parser.add_argument('--knowledge_index_path', type=str, default="./tc_processed/tc_knowledge_sent_embs.pkl",
                         help="Path to knowledge index file")
     parser.add_argument("--dataset_cache", type=str, default='./dataset_caches', help="Path or url of the dataset cache")
     parser.add_argument("--model_checkpoint", type=str, default="gpt2-medium",
@@ -404,6 +403,8 @@ def train():
                         help="Set to O0, O1, O2 or O3 for fp16 training (see apex documentation)")
     parser.add_argument("--local_rank", type=int, default=-1,
                         help="Local rank for distributed training (-1: not distributed)")
+    parser.add_argument('--parallel', action="store_true",
+                        help="Set up data parallelism for training")
     parser.add_argument('--log_dir', type=str, default="runs/",
                         help="Output log directory for summary")
     parser.add_argument('--experiment_name', type=str, default="topical_chats_gpt2",
@@ -415,6 +416,7 @@ def train():
                         help="Nucleus filtering (top-p) before sampling (<=0.0: no filtering)")
     parser.add_argument("--no_sample", action='store_true', help="Set to use greedy decoding instead of sampling")
     parser.add_argument("--max_length", type=int, default=20, help="Maximum length of the output utterances")
+    parser.add_argument("--knowledge_policy", type=str, default="embeddings", choices=["tf_idf", "embeddings"])
     args = parser.parse_args()
 
     # logging is set to INFO (resp. WARN) for main (resp. auxiliary) process. logger.info => log main process only, logger.warning => log all processes
@@ -442,8 +444,14 @@ def train():
     loaders = get_data_loaders_optimized(args, tokenizer)
     train_loader, _, _, _ = loaders
 
-    # Load the model after the tokenizer. We hit an OOM error if we try to pre-load the model
-    model_class = GPT2DoubleHeadsModel
+    if args.distributed or args.parallel:
+        # Gradient checkpointing significantly slows down distributed training,
+        # so we use the original variant of the class for training
+        import transformers.modeling_gpt2 as mgpt2
+        model_class = mgpt2.GPT2DoubleHeadsModel
+    else:
+        # Load the model after the tokenizer. We hit an OOM error if we try to pre-load the model
+        model_class = GPT2DoubleHeadsModel
 
     # Hack to evaluate model in the way we saved. TODO: Fix this today
     if os.path.isdir(args.model_checkpoint):
@@ -451,11 +459,16 @@ def train():
         model = data["mymodel"]
     else:
         model = model_class.from_pretrained(args.model_checkpoint)
-    model.to(args.device)
 
     # Add special tokens if they are not already added
     if num_added_tokens > 0:
         model.resize_token_embeddings(new_num_tokens=orig_num_tokens + num_added_tokens)
+
+    if args.parallel:
+        # Setup data parallel version of the model to make
+        # use of multi-GPU
+        model = torch.nn.DataParallel(model)
+    model.to(args.device)
 
     optimizer = AdamW(model.parameters(), lr=args.lr, correct_bias=True)
 
