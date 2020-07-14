@@ -256,9 +256,6 @@ def run_train(model, optimizer, scheduler, train_loader, writer, step_counter, a
             mc_labels=mc_labels, lm_labels=lm_labels
         )
         loss = (lm_loss * args.lm_coef + mc_loss * args.mc_coef) / args.gradient_accumulation_steps
-
-        if loss.shape[-1] > 1:
-            loss = loss.sum()
         # Average loss across all items in the batch
         running_loss.add(float(loss))
 
