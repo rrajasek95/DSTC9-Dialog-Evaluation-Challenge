@@ -1,0 +1,358 @@
+Statement-non-opinion,Statement-opinion,33461
+Statement-opinion,Statement-opinion,32686
+Statement-non-opinion,Statement-non-opinion,27865
+Yes-No-Question,Statement-non-opinion,22368
+Statement-opinion,Statement-non-opinion,22117
+Yes-No-Question,Statement-opinion,16636
+Statement-non-opinion,Yes-No-Question,7652
+Statement-opinion,Yes-No-Question,6262
+Statement-non-opinion,Open-Question,4574
+Statement-opinion,Agree/Accept,4329
+Statement-opinion,Open-Question,3930
+Yes-No-Question,Yes-No-Question,3723
+Statement-non-opinion,Agree/Accept,2490
+Statement-non-opinion,Conventional-opening,2098
+Yes-No-Question,Open-Question,1729
+Statement-opinion,Conventional-opening,1655
+Wh-Question,Statement-non-opinion,1631
+Declarative Yes-No-Question,Statement-opinion,1628
+Declarative Yes-No-Question,Statement-non-opinion,1602
+Yes-No-Question,Agree/Accept,1348
+Wh-Question,Statement-opinion,1328
+Statement-non-opinion,Appreciation,1296
+Statement-non-opinion,Declarative Yes-No-Question,1097
+Statement-opinion,Declarative Yes-No-Question,903
+Conventional-closing,Statement-opinion,885
+Yes-No-Question,Conventional-opening,852
+Statement-non-opinion,Wh-Question,829
+Statement-opinion,Appreciation,818
+Conventional-closing,Statement-non-opinion,770
+Yes-No-Question,Wh-Question,704
+Statement-non-opinion,Conventional-closing,676
+Statement-opinion,Wh-Question,630
+Statement-opinion,Conventional-closing,620
+Open-Question,Statement-opinion,618
+Statement-non-opinion,Acknowledge (Backchannel),599
+Open-Question,Statement-non-opinion,564
+Statement-opinion,Acknowledge (Backchannel),559
+Conventional-closing,Conventional-closing,528
+Yes-No-Question,Declarative Yes-No-Question,413
+Conventional-opening,Statement-opinion,410
+Statement-non-opinion,Action-directive,334
+Wh-Question,Yes-No-Question,321
+Conventional-opening,Statement-non-opinion,316
+Statement-opinion,Action-directive,298
+Declarative Yes-No-Question,Yes-No-Question,275
+Yes-No-Question,Appreciation,264
+Yes-No-Question,Acknowledge (Backchannel),220
+Conventional-closing,Conventional-opening,174
+Action-directive,Statement-non-opinion,168
+Conventional-closing,Declarative Yes-No-Question,164
+Wh-Question,Open-Question,159
+Action-directive,Statement-opinion,156
+Appreciation,Statement-opinion,152
+Yes-No-Question,Action-directive,149
+Declarative Yes-No-Question,Open-Question,145
+Agree/Accept,Statement-opinion,131
+Statement-non-opinion,Thanking,130
+Conventional-closing,Action-directive,130
+Agree/Accept,Statement-non-opinion,124
+Yes-No-Question,Negative non-no answers,119
+Yes-No-Question,Conventional-closing,116
+Signal-non-understanding,Statement-opinion,115
+Conventional-opening,Conventional-opening,111
+Conventional-closing,Open-Question,109
+Open-Question,Yes-No-Question,106
+Appreciation,Statement-non-opinion,104
+Statement-non-opinion,Backchannel in question form,103
+Declarative Yes-No-Question,Agree/Accept,100
+Statement-non-opinion,Signal-non-understanding,98
+Wh-Question,Conventional-opening,98
+Signal-non-understanding,Statement-non-opinion,92
+Thanking,Statement-opinion,85
+Conventional-opening,Yes-No-Question,85
+Yes-No-Question,No answers,84
+Summarize/reformulate,Statement-opinion,83
+Wh-Question,Wh-Question,83
+Wh-Question,Agree/Accept,80
+Statement-opinion,Yes answers,79
+Statement-non-opinion,Yes answers,78
+Declarative Yes-No-Question,Conventional-opening,78
+Conventional-closing,Thanking,77
+Statement-non-opinion,Summarize/reformulate,77
+Yes-No-Question,Summarize/reformulate,76
+Thanking,Statement-non-opinion,75
+Statement-opinion,Thanking,75
+Statement-opinion,Negative non-no answers,74
+Yes-No-Question,Signal-non-understanding,73
+Yes-No-Question,Yes answers,72
+Yes-No-Question,Thanking,72
+Conventional-closing,Agree/Accept,71
+Open-Question,Open-Question,68
+Statement-opinion,Backchannel in question form,67
+Statement-non-opinion,Apology,66
+Statement-opinion,Signal-non-understanding,63
+Statement-opinion,Summarize/reformulate,62
+Conventional-opening,Open-Question,61
+Conventional-closing,Yes-No-Question,60
+Yes-No-Question,Other answers,60
+Statement-opinion,Affirmative non-yes answers,59
+Declarative Yes-No-Question,Declarative Yes-No-Question,55
+Summarize/reformulate,Statement-non-opinion,54
+Declarative Yes-No-Question,Conventional-closing,50
+Agree/Accept,Yes-No-Question,49
+Wh-Question,Conventional-closing,48
+Conventional-opening,Conventional-closing,47
+Statement-opinion,Apology,47
+Acknowledge (Backchannel),Statement-opinion,47
+Yes-No-Question,Backchannel in question form,45
+Wh-Question,Thanking,45
+Open-Question,Agree/Accept,44
+Acknowledge (Backchannel),Statement-non-opinion,43
+Yes-No-Question,Hedge,42
+Action-directive,Yes-No-Question,42
+Yes-No-Question,Apology,42
+Thanking,Conventional-closing,41
+Declarative Yes-No-Question,Wh-Question,39
+Wh-Question,Declarative Yes-No-Question,38
+Appreciation,Yes-No-Question,37
+Statement-non-opinion,Affirmative non-yes answers,37
+Statement-non-opinion,Negative non-no answers,36
+Open-Question,Conventional-opening,34
+Statement-non-opinion,Other answers,34
+Statement-non-opinion,Hedge,34
+Conventional-opening,Agree/Accept,32
+Wh-Question,Appreciation,29
+Declarative Yes-No-Question,Appreciation,26
+Statement-opinion,No answers,25
+Conventional-opening,Action-directive,23
+Conventional-opening,Wh-Question,22
+Action-directive,Open-Question,21
+Summarize/reformulate,Yes-No-Question,21
+Conventional-opening,Declarative Yes-No-Question,20
+Action-directive,Conventional-closing,20
+Yes-No-Question,Affirmative non-yes answers,20
+Declarative Yes-No-Question,Acknowledge (Backchannel),20
+Signal-non-understanding,Yes-No-Question,20
+Negative non-no answers,Statement-non-opinion,19
+Statement-non-opinion,Declarative Wh-Question,19
+Statement-opinion,Other answers,19
+Statement-opinion,Hedge,18
+Statement-opinion,Declarative Wh-Question,18
+Thanking,Conventional-opening,18
+Appreciation,Agree/Accept,18
+Action-directive,Agree/Accept,18
+Conventional-closing,Appreciation,17
+Wh-Question,Apology,17
+Statement-non-opinion,No answers,17
+Open-Question,Conventional-closing,17
+Open-Question,Declarative Yes-No-Question,16
+Open-Question,Wh-Question,16
+Action-directive,Declarative Yes-No-Question,16
+Thanking,Declarative Yes-No-Question,15
+Action-directive,Conventional-opening,15
+Declarative Yes-No-Question,Hedge,15
+Appreciation,Open-Question,14
+Open-Question,Appreciation,14
+Conventional-opening,Appreciation,13
+Thanking,Action-directive,12
+Wh-Question,Other answers,12
+Declarative Yes-No-Question,Other answers,12
+Declarative Yes-No-Question,Negative non-no answers,12
+Wh-Question,Acknowledge (Backchannel),12
+Declarative Yes-No-Question,Action-directive,12
+Acknowledge (Backchannel),Yes-No-Question,11
+Summarize/reformulate,Conventional-opening,11
+Open-Question,Action-directive,11
+Wh-Question,Summarize/reformulate,11
+Wh-Question,Action-directive,11
+Statement-opinion,Reject,11
+Summarize/reformulate,Open-Question,11
+Or-Clause,Statement-non-opinion,11
+Agree/Accept,Conventional-closing,11
+Wh-Question,Hedge,11
+Apology,Statement-non-opinion,11
+Negative non-no answers,Statement-opinion,11
+No answers,Statement-non-opinion,10
+Declarative Yes-No-Question,Signal-non-understanding,10
+Conventional-closing,Acknowledge (Backchannel),10
+Agree/Accept,Declarative Yes-No-Question,10
+Agree/Accept,Open-Question,10
+Open-Question,Acknowledge (Backchannel),10
+Declarative Yes-No-Question,Summarize/reformulate,10
+Agree/Accept,Agree/Accept,9
+Open-Question,Thanking,9
+Agree/Accept,Conventional-opening,9
+Declarative Yes-No-Question,Yes answers,9
+Appreciation,Conventional-opening,9
+Apology,Statement-opinion,9
+Statement-opinion,Hold before answer/agreement,9
+Declarative Yes-No-Question,Thanking,9
+Conventional-opening,Thanking,8
+Rhetorical-Questions,Statement-opinion,8
+Statement-non-opinion,Hold before answer/agreement,8
+Statement-non-opinion,Or-Clause,8
+Action-directive,Acknowledge (Backchannel),8
+Backchannel in question form,Statement-opinion,8
+Summarize/reformulate,Agree/Accept,8
+Thanking,Thanking,8
+Yes-No-Question,Reject,8
+Yes answers,Statement-opinion,7
+Yes answers,Statement-non-opinion,7
+Conventional-closing,Apology,7
+Appreciation,Appreciation,7
+Action-directive,Action-directive,7
+Acknowledge (Backchannel),Conventional-opening,6
+Acknowledge (Backchannel),Open-Question,6
+Declarative Wh-Question,Statement-opinion,6
+Reject,Statement-opinion,6
+Statement-non-opinion,Reject,6
+Action-directive,Thanking,6
+Acknowledge (Backchannel),Conventional-closing,6
+Yes answers,Yes-No-Question,5
+Statement-opinion,Or-Clause,5
+Summarize/reformulate,Conventional-closing,5
+Summarize/reformulate,Appreciation,5
+Conventional-opening,Acknowledge (Backchannel),5
+Signal-non-understanding,Agree/Accept,5
+Yes-No-Question,Downplayer,5
+Thanking,Agree/Accept,5
+Agree/Accept,Wh-Question,5
+Appreciation,Declarative Yes-No-Question,5
+Signal-non-understanding,Open-Question,5
+Thanking,Yes-No-Question,4
+Hedge,Yes-No-Question,4
+Signal-non-understanding,Wh-Question,4
+Declarative Wh-Question,Statement-non-opinion,4
+Statement-non-opinion,Rhetorical-Questions,4
+Other answers,Statement-non-opinion,4
+Wh-Question,Affirmative non-yes answers,4
+Or-Clause,Statement-opinion,4
+No answers,Statement-opinion,4
+Agree/Accept,Appreciation,4
+Thanking,Open-Question,4
+Hedge,Statement-opinion,4
+Acknowledge (Backchannel),Agree/Accept,4
+Affirmative non-yes answers,Statement-non-opinion,4
+Reject,Yes-No-Question,4
+Negative non-no answers,Open-Question,4
+Reject,Statement-non-opinion,4
+Conventional-closing,Wh-Question,4
+Yes-No-Question,Declarative Wh-Question,4
+Signal-non-understanding,Declarative Yes-No-Question,4
+Action-directive,Appreciation,4
+Hedge,Statement-non-opinion,4
+Appreciation,Wh-Question,4
+Open-Question,Apology,3
+Wh-Question,Yes answers,3
+Hold before answer/agreement,Statement-non-opinion,3
+Affirmative non-yes answers,Statement-opinion,3
+Conventional-opening,Summarize/reformulate,3
+Summarize/reformulate,Wh-Question,3
+Yes-No-Question,Hold before answer/agreement,3
+Or-Clause,Agree/Accept,3
+Appreciation,Conventional-closing,3
+Backchannel in question form,Statement-non-opinion,3
+Signal-non-understanding,Conventional-opening,3
+Yes answers,Open-Question,3
+Conventional-opening,Apology,3
+Apology,Yes-No-Question,3
+Open-Question,Signal-non-understanding,3
+Conventional-closing,Summarize/reformulate,2
+Wh-Question,Backchannel in question form,2
+Wh-Question,Negative non-no answers,2
+Appreciation,Thanking,2
+Declarative Yes-No-Question,Affirmative non-yes answers,2
+Signal-non-understanding,Acknowledge (Backchannel),2
+Thanking,Acknowledge (Backchannel),2
+Agree/Accept,Action-directive,2
+Acknowledge (Backchannel),Declarative Yes-No-Question,2
+Open-Question,Negative non-no answers,2
+Declarative Yes-No-Question,Reject,2
+Signal-non-understanding,Other answers,2
+Acknowledge (Backchannel),Acknowledge (Backchannel),2
+Action-directive,Wh-Question,2
+Thanking,Yes answers,2
+Conventional-closing,Yes answers,2
+Conventional-closing,Signal-non-understanding,2
+Appreciation,Action-directive,2
+Signal-non-understanding,Appreciation,2
+Declarative Yes-No-Question,Apology,2
+Apology,Conventional-closing,2
+Statement-opinion,Rhetorical-Questions,2
+Declarative Yes-No-Question,No answers,2
+Downplayer,Statement-opinion,2
+Yes-No-Question,Or-Clause,2
+Open-Question,Yes answers,2
+Appreciation,Signal-non-understanding,2
+Declarative Wh-Question,Conventional-closing,1
+Signal-non-understanding,Backchannel in question form,1
+Yes answers,Declarative Yes-No-Question,1
+Other answers,Yes-No-Question,1
+Or-Clause,Yes-No-Question,1
+Conventional-closing,Hedge,1
+Acknowledge (Backchannel),Wh-Question,1
+Negative non-no answers,Conventional-opening,1
+Declarative Wh-Question,Declarative Yes-No-Question,1
+Thanking,Apology,1
+Apology,Conventional-opening,1
+Yes answers,Thanking,1
+Summarize/reformulate,Action-directive,1
+No answers,Conventional-opening,1
+Hold before answer/agreement,Statement-opinion,1
+Apology,Wh-Question,1
+No answers,Declarative Yes-No-Question,1
+Conventional-opening,Hedge,1
+Or-Clause,Conventional-closing,1
+Wh-Question,Downplayer,1
+Or-Clause,Wh-Question,1
+Open-Question,Backchannel in question form,1
+No answers,Open-Question,1
+Rhetorical-Questions,Yes-No-Question,1
+Action-directive,Declarative Wh-Question,1
+Agree/Accept,Summarize/reformulate,1
+Yes-No-Question,Rhetorical-Questions,1
+Hold before answer/agreement,Yes-No-Question,1
+Statement-non-opinion,Downplayer,1
+Negative non-no answers,Yes-No-Question,1
+Negative non-no answers,Agree/Accept,1
+Thanking,Declarative Wh-Question,1
+Appreciation,Acknowledge (Backchannel),1
+Conventional-closing,Affirmative non-yes answers,1
+Yes answers,Conventional-opening,1
+Thanking,Appreciation,1
+Conventional-opening,Signal-non-understanding,1
+Statement-opinion,Downplayer,1
+Declarative Wh-Question,Yes-No-Question,1
+Hedge,Declarative Yes-No-Question,1
+Conventional-closing,Rhetorical-Questions,1
+Yes answers,Wh-Question,1
+Signal-non-understanding,Conventional-closing,1
+Downplayer,Statement-non-opinion,1
+Agree/Accept,Backchannel in question form,1
+Apology,Acknowledge (Backchannel),1
+Appreciation,Reject,1
+Wh-Question,Reject,1
+Backchannel in question form,Wh-Question,1
+Signal-non-understanding,Hedge,1
+Conventional-closing,Declarative Wh-Question,1
+Summarize/reformulate,Affirmative non-yes answers,1
+Summarize/reformulate,No answers,1
+Open-Question,Hedge,1
+Signal-non-understanding,Action-directive,1
+Declarative Yes-No-Question,Rhetorical-Questions,1
+Wh-Question,Signal-non-understanding,1
+Apology,Open-Question,1
+Backchannel in question form,Acknowledge (Backchannel),1
+No answers,Wh-Question,1
+Apology,Declarative Yes-No-Question,1
+Agree/Accept,Acknowledge (Backchannel),1
+Other answers,Appreciation,1
+Thanking,Negative non-no answers,1
+Agree/Accept,Other answers,1
+Summarize/reformulate,Yes answers,1
+Affirmative non-yes answers,Declarative Yes-No-Question,1
+Reject,Open-Question,1
+Declarative Yes-No-Question,Backchannel in question form,1
+Appreciation,Affirmative non-yes answers,1
+Apology,Negative non-no answers,1
