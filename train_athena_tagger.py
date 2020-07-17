@@ -2,6 +2,8 @@ import argparse
 import math
 import os
 import json
+import pickle
+
 import pandas as pd
 import torch
 from sklearn.metrics import precision_score, recall_score, f1_score, classification_report
@@ -149,6 +151,12 @@ def train_infersent_model(args):
     train_loader = DataLoader(train, batch_size=args.batch_size, collate_fn=prepare_batch)
     valid_loader = DataLoader(valid, batch_size=args.batch_size, collate_fn=prepare_batch, shuffle=False)
     optimizer = Adam(model.parameters(), lr=args.lr)
+
+    with open('taggers/checkpoints/infersent_config.pkl', 'wb') as infersent_training_config_file:
+        pickle.dump({
+            "params": params_model,
+            "vocab": train.vocab,
+        }, infersent_training_config_file)
 
     train_loop(model, optimizer, (train_loader, valid_loader), train.vocab, args)
 
