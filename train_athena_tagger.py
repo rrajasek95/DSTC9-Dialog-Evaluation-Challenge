@@ -115,7 +115,7 @@ def train_loop(model, optimizer, loaders, vocab, args):
         run_train(model, optimizer, train_loader, args)
         run_eval(model, valid_loader, vocab, args)
 
-        torch.save(model.state_dict(), f'taggers/checkpoints/infersent_clf_{i + 1}.pt')
+        torch.save(model.state_dict(), f'taggers/checkpoints/{args.model}_clf_{i + 1}.pt')
 
 
 def train_infersent_model(args):
