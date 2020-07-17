@@ -7,8 +7,9 @@ import torch
 from sklearn.metrics import precision_score, recall_score, f1_score, classification_report
 from torch.nn import CrossEntropyLoss
 from tqdm import tqdm
+from transformers import AdamW
 
-from taggers.models import InferSentClassifier
+from taggers.models import InferSentClassifier, GPT2Classifier
 from taggers.dataset import AthenaDaDataset
 from sklearn.model_selection import train_test_split
 from torch.utils.data.dataloader import DataLoader
@@ -53,7 +54,7 @@ def run_train(model, optimizer, loader, args):
 
     model.train()
     for i, batch in tqdm(enumerate(loader)):
-        optimizer.zero_grad()
+
         sents, y = batch
 
         loss, _ = model(sents, y)
@@ -61,10 +62,15 @@ def run_train(model, optimizer, loader, args):
         running_loss.add(float(loss))
 
         loss.backward()
-        optimizer.step()
+        if args.max_norm > 0.0:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_norm)
+
         if i % 100 == 0:
             print("Running loss: ", running_loss.get())
-        torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_norm)
+        if i % args.gradient_accumulation_steps == 0:
+            optimizer.step()
+            optimizer.zero_grad()
+
 
     print(f"Epoch loss: {running_loss.get()}")
     print(f"Epoch PPL: {ppl.get()}")
@@ -146,24 +152,59 @@ def train_infersent_model(args):
 
     train_loop(model, optimizer, (train_loader, valid_loader), train.vocab, args)
 
+def train_gpt2model(args):
+    skip_labels = [
+        "device",
+        "nonsense",
+        "interjection",
+        "abandon",
+        "rq",
+        "invalid-command",
+        "pause",
+        "request-repeat",
+        "request-options",
+        "stop-intent",
+        "hold"
+    ]
+
+    df = load_json_data(filename='all_augmented.json', skip_labels=skip_labels)
+    train_df, valid_df = train_test_split(df, test_size=0.3, stratify=df['label'])
+
+    train, valid = AthenaDaDataset(train_df), AthenaDaDataset(valid_df)
+
+    model = GPT2Classifier(train.num_labels(), args.model_checkpoint, joint_train=args.joint_train, device=args.device)
+
+    model.to(args.device)
+
+    train_loader = DataLoader(train, batch_size=args.batch_size, collate_fn=prepare_batch)
+    valid_loader = DataLoader(valid, batch_size=args.batch_size, collate_fn=prepare_batch, shuffle=False)
+    optimizer = AdamW(model.parameters(), lr=args.lr)
+
+    train_loop(model, optimizer, (train_loader, valid_loader), train.vocab, args)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--lr', default=1e-4)
-    parser.add_argument('--batch_size', default=64)
-    parser.add_argument('--grad_accum_steps', default=4)
-    parser.add_argument('--n_epochs', default=2)
+    parser.add_argument('--model', default="infersent",
+                        choices=['infersent', 'gpt2'])
+    parser.add_argument('--lr', type=float, default=1e-4)
+    parser.add_argument('--batch_size', type=int, default=64)
+    parser.add_argument('--gradient_accumulation_steps', type=int, default=4)
+    parser.add_argument('--n_epochs', default=2, type=int)
     parser.add_argument("--max_norm", type=float, default=1.0, help="Clipping gradient norm")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu",
                         help="Device (cuda or cpu)")
 
-    parser.add_argument('--joint_train', default=True, type=bool)
+    parser.add_argument('--joint_train', default=False, type=bool)
     parser.add_argument('--verbose', action="store_true")
     parser.add_argument('--infersent_model_path', default='taggers/encoder/infersent2.pkl')
     parser.add_argument('--infersent_w2v_path', default='taggers/fastText/crawl-300d-2M.vec')
 
+    parser.add_argument('--model_checkpoint', default="microsoft/DialoGPT-medium")
 
     args = parser.parse_args()
 
-    train_infersent_model(args)
+    if args.model == "gpt2":
+        train_gpt2model(args)
+    else:
+        train_infersent_model(args)

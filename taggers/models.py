@@ -1,7 +1,7 @@
+import numpy as np
 import torch
 import torch.nn as nn
-
-import numpy as np
+from transformers import GPT2Tokenizer, GPT2Model
 
 from taggers.infersent.models import InferSent
 
@@ -51,6 +51,46 @@ class InferSentClassifier(nn.Module):
 
     def visualize(self, sentence):
         self.infersent.visualize(sentence, tokenize=True)
+
+    def predict(self, sentences):
+        with torch.no_grad():
+            _, logits = self.forward(sentences)
+            predictions = logits.argmax(dim=-1)
+        return predictions
+
+class GPT2Classifier(nn.Module):
+    def __init__(self,
+                 num_labels,
+                 pretrained_model='microsoft/DialoGPT-medium',
+                 joint_train=False,
+                 device="cpu"):
+        super(GPT2Classifier, self).__init__()
+        self.tokenizer = GPT2Tokenizer.from_pretrained(pretrained_model)
+        self.tokenizer.pad_token = self.tokenizer.eos_token
+        self.encoder = GPT2Model.from_pretrained(pretrained_model).to(device)
+        embed_size = self.encoder.config.hidden_size
+        self.linear = nn.Linear(embed_size, num_labels)
+        self.device = device
+        self.ce_loss = nn.CrossEntropyLoss()
+
+        if not joint_train:
+            for param in self.encoder.parameters():
+                param.requires_grad = False
+
+    def forward(self, sents, labels=None):
+        inp_dict = self.tokenizer.batch_encode_plus(sents,
+                                                    pad_to_max_length=True,
+                                                    return_tensors="pt")
+
+        hidden, _ = self.encoder(input_ids=inp_dict["input_ids"].to(self.device),
+                                 attention_mask=inp_dict["attention_mask"].to(self.device),
+                                 token_type_ids=inp_dict["token_type_ids"].to(self.device))
+        embed = hidden[:, -1, :]
+        logits = self.linear(embed)
+
+        loss = self.ce_loss(logits, labels.to(self.device)) if labels is not None else None
+
+        return loss, logits
 
     def predict(self, sentences):
         with torch.no_grad():
