@@ -9,7 +9,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.svm import LinearSVC
 
 
-def load_json_data(filename):
+def load_json_data(filename, skip_labels):
     data_dir = 'data'
     file_path = os.path.join(data_dir, filename)
 
@@ -20,6 +20,9 @@ def load_json_data(filename):
 
         for label, utterances in label_utt_dict.items():
             print("Label {} Count {}".format(label, len(utterances)))
+            if label in skip_labels:
+                print(f"Label {label} skipped!")
+
             # if len(utterances) < 10:  # Skip sparse labels
             #     print("Skipped label ", label)
             #     continue
