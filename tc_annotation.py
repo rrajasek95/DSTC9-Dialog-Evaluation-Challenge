@@ -1,9 +1,11 @@
 import argparse
 import json
 import os
+import pickle
 
 import more_itertools
 import spacy
+import torch
 from flair.data import Sentence
 from flair.models import SequenceTagger
 from tqdm.auto import tqdm
@@ -11,12 +13,14 @@ from tqdm.auto import tqdm
 from annotators.spotlight import SpotlightTagger
 from annotators.vader import VaderSentimentTagger
 
+from taggers.models import InferSentClassifier
+
 """
 Script to perform annotation of Topical Chats data.
 
 Performs the following kinds of annotations:
 1. Sentence (sub-turn) level Named Entity recognition (NER)
-2. Dialog act annotation (WIP; Need to set up the DA tagger module)
+2. Dialog act annotation
 """
 
 
@@ -82,6 +86,56 @@ def perform_vader_annotation(args):
         with open(os.path.join(data_dir, split + '_anno_vader.json'), 'w') as annotated_file:
             json.dump(annotated_split, annotated_file)
 
+
+def load_athena_tagger(args):
+    with open('taggers/checkpoints/infersent_config.pkl', 'rb') as infersent_config:
+        cfg = pickle.load(infersent_config)
+
+    state_dict = torch.load('taggers/checkpoints/infersent_clf_8.pt')
+
+    MODEL_PATH = 'taggers/encoder/infersent2.pkl'
+    W2V_PATH = 'taggers/fastText/crawl-300d-2M.vec'
+
+    classifier = InferSentClassifier(len(cfg["vocab"]), MODEL_PATH, W2V_PATH, cfg["params"], device=args.device)
+    classifier.load_state_dict(state_dict)
+    classifier.to(args.device)
+    return classifier, cfg["vocab"]
+
+def athena_annotate(tagger, split_data):
+    classifier, vocab = tagger
+    for conv_id, dialog_data in tqdm(split_data.items()):
+        for turn in dialog_data["content"]:
+            dacts = []
+            for segment in turn["segments"]:
+                dact = vocab.itos[classifier.predict([segment["text"]])]
+                dacts.append(dact)
+            turn["athena_das"] = dacts
+    return split_data
+
+def perform_athena_da_annotation(args):
+    data_dir = os.path.join(
+        args.data_dir,
+        'tc_processed'
+    )
+
+    splits = [
+        'train',
+        'valid_freq',
+        'valid_rare',
+        'test_freq',
+        'test_rare'
+    ]
+
+    tagger = load_athena_tagger(args)
+    for split in splits:
+
+        with open(os.path.join(data_dir, split + '_full_anno.json'), 'r') as data_file:
+            split_data = json.load(data_file)
+
+        annotated_split = athena_annotate(tagger, split_data)
+
+        with open(os.path.join(data_dir, split + '_anno_athena.json'), 'w') as annotated_file:
+            json.dump(annotated_split, annotated_file)
 
 def annotate_split(nlp, split_data, split):
     for conv_id, dialog_data in tqdm(split_data.items()):
@@ -305,9 +359,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_dir', type=str, default='./',
                         help='Base directory for the data')
-
+    parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu",
+                        help="Device (cuda or cpu)")
     args = parser.parse_args()
-    partition_training_conversations(args.data_dir)
+    perform_athena_da_annotation(args)
     # merge_all_annotations(args)
     # perform_vader_annotation(args)
 
