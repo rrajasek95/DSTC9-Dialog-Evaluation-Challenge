@@ -79,7 +79,7 @@ def load_split_reading_set(data_file_path, split):
 
 def build_fb_embs_set(reading_set, infersent, knowledge_convo_embs):
 
-    convo_sets = {}
+    convo_sets = []
     all_knowledge_sents = []
     for conv_id, data in reading_set.items():
         knowledge_sents = []
@@ -99,12 +99,14 @@ def build_fb_embs_set(reading_set, infersent, knowledge_convo_embs):
                 knowledge_sents.append(clean(sentence))
 
         for sent in knowledge_sents:
-            convo_sets[sent] = conv_id
+            convo_sets.append(conv_id)
         all_knowledge_sents += knowledge_sents
 
     embeddings = infersent.encode(all_knowledge_sents, tokenize=True)
     for i in range(len(all_knowledge_sents)):
-        convo_id = convo_sets[all_knowledge_sents[i]]
+        convo_id = convo_sets[i]
+        if convo_id not in knowledge_convo_embs:
+            knowledge_convo_embs[convo_id] = []
         knowledge_convo_embs[convo_id].append([all_knowledge_sents[i], embeddings[i]])
     return knowledge_convo_embs
 
