@@ -6,12 +6,14 @@ import json
 import os
 import string
 import glove.glove_utils
+from encoder.fb_models import InferSent
 from glove.glove_utils import get_sentence_glove_embedding
 import pickle
 
 from nltk import word_tokenize
 from nltk import sent_tokenize
-
+import torch
+import nltk
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 
@@ -73,6 +75,32 @@ def load_split_reading_set(data_file_path, split):
         split_reading_set = json.load(reading_set_file)
 
     return split_reading_set
+
+
+def build_fb_embs_set(reading_set, infersent, knowledge_convo_embs):
+
+    for conv_id, data in reading_set.items():
+        knowledge_sents = extract_fact_set(data["agent_1"])
+        knowledge_sents += extract_fact_set(data["agent_2"])
+
+        article_data = data["article"]
+
+        article_indices = ['AS1', 'AS2', 'AS3', 'AS4']
+
+        # Article information
+        if "AS1" in article_data:
+            for idx in article_indices:
+                sentence = article_data[idx]
+                if len(word_tokenize(sentence)) < 5:
+                    continue
+                knowledge_sents.append(clean(sentence))
+
+        knowledge_convo_embs[conv_id] = []
+        for sent in knowledge_sents:
+            embeddings = infersent.encode([sent], tokenize=True)
+            knowledge_convo_embs[conv_id].append([sent, embeddings[0]])
+
+    return knowledge_convo_embs
 
 
 def build_knowledge_set(reading_set, knowledge_convo_embs=None, embs=False, emb_matrix=None, tokenizer=None):
@@ -163,6 +191,39 @@ def build_topical_chats_knowledge_index_glove(args):
             "embedding_matrix": glove_obj.embedding_matrix,
             # "vocab": glove_obj.vocab,
             # "embeddings_index": glove_obj.embeddings_index
+        }, knowledge_index_file)
+
+
+
+def build_topical_chats_knowledge_index_facebook(args):
+    data_file_path = os.path.join(
+        args.data_dir,
+        'alexa-prize-topical-chat-dataset',
+    )
+
+    splits = ['train', 'valid_freq', 'valid_rare', 'test_freq', 'test_rare']
+
+    V = 2
+    MODEL_PATH = 'encoder/infersent%s.pkl' % V
+    params_model = {'bsize': 64, 'word_emb_dim': 300, 'enc_lstm_dim': 2048,
+                    'pool_type': 'max', 'dpout_model': 0.0, 'version': V}
+    infersent = InferSent(params_model)
+    infersent.load_state_dict(torch.load(MODEL_PATH))
+    W2V_PATH = 'fastText/crawl-300d-2M.vec'
+    infersent.set_w2v_path(W2V_PATH)
+
+    infersent.build_vocab_k_words(K=100000)
+    knowledge_convo_embs = {}
+
+    for split in splits:
+        split_reading_set = load_split_reading_set(data_file_path, split)
+        knowledge_convo_embs = build_fb_embs_set(split_reading_set, infersent, knowledge_convo_embs)
+
+    knowledge_index_path = os.path.join(args.data_dir, 'tc_processed', 'tc_knowledge_index_facebook.pkl')
+
+    with open(knowledge_index_path, 'wb') as knowledge_index_file:
+        pickle.dump({
+            "knowledge_vecs": knowledge_convo_embs
         }, knowledge_index_file)
 
 
@@ -284,10 +345,12 @@ if __name__ == '__main__':
     parser.add_argument('--data_dir', type=str, default='./',
                         help='Directory where the topical chats folder is present')
 
-    parser.add_argument('--knowledge_policy', type=str, default='glove', choices=['glove', 'tf_idf'])
+    parser.add_argument('--knowledge_policy', type=str, default='facebook', choices=['glove', 'tf_idf', 'facebook'])
     args = parser.parse_args()
-    if args.knowledge_policy == "glove":
-        # build_topical_chats_knowledge_index_glove(args)
+    if args.knowledge_policy == 'facebook':
+        build_topical_chats_knowledge_index_facebook(args)
+    elif args.knowledge_policy == "glove":
+        build_topical_chats_knowledge_index_glove(args)
         build_conversation_knowledge_embeddings(args, 'tc_processed/tc_knowledge_index_glove.pkl')
     elif args.dataset_type == "dstc9":
         build_tfidf_from_dstc9(args)
