@@ -96,9 +96,9 @@ def build_fb_embs_set(reading_set, infersent, knowledge_convo_embs):
                 knowledge_sents.append(clean(sentence))
 
         knowledge_convo_embs[conv_id] = []
-        for sent in knowledge_sents:
-            embeddings = infersent.encode([sent], tokenize=True)
-            knowledge_convo_embs[conv_id].append([sent, embeddings[0]])
+        embeddings = infersent.encode(knowledge_sents, tokenize=True)
+        for i in range(len(knowledge_sents)):
+            knowledge_convo_embs[conv_id].append([knowledge_sents[i], embeddings[i]])
 
     return knowledge_convo_embs
 
@@ -201,7 +201,14 @@ def build_topical_chats_knowledge_index_facebook(args):
         'alexa-prize-topical-chat-dataset',
     )
 
-    splits = ['train', 'valid_freq', 'valid_rare', 'test_freq', 'test_rare']
+    splits = [
+        'train',
+        'valid_freq',
+        'valid_rare',
+        'test_freq',
+        'test_rare'
+    ]
+
 
     V = 2
     MODEL_PATH = 'encoder/infersent%s.pkl' % V
