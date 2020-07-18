@@ -235,7 +235,7 @@ def build_topical_chats_knowledge_index_facebook(args):
 
     knowledge_convo_embs = build_fb_embs_set(reading_sets, infersent, knowledge_convo_embs)
 
-    knowledge_index_path = os.path.join(args.data_dir, 'tc_processed', 'tc_knowledge_index_facebook_valid_freq.pkl')
+    knowledge_index_path = os.path.join(args.data_dir, 'tc_processed', 'tc_knowledge_index_facebook.pkl')
 
     with open(knowledge_index_path, 'wb') as knowledge_index_file:
         pickle.dump({
