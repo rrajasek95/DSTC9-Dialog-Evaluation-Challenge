@@ -8,8 +8,8 @@ import torch
 from nltk import word_tokenize
 from sklearn.metrics.pairwise import linear_kernel
 from tqdm import tqdm
-from glove.glove_utils import get_max_cosine_similarity
-
+from glove.glove_utils import get_max_cosine_similarity, get_max_cosine_similarity_infersent
+from encoder.fb_models import InferSent
 from knowledge_index import extract_fact_set, clean
 
 CONFIG_NAME = 'config.json'
@@ -99,6 +99,17 @@ def extract_fact_set_mapped(factsets):
 
 
 def process_split(dataset_path, split, tokenizer, index, knowledge_policy):
+    if knowledge_policy == "infersent":
+        V = 2
+        MODEL_PATH = 'encoder/infersent%s.pkl' % V
+        params_model = {'bsize': 64, 'word_emb_dim': 300, 'enc_lstm_dim': 2048,
+                        'pool_type': 'max', 'dpout_model': 0.0, 'version': V}
+        infersent = InferSent(params_model)
+        infersent.load_state_dict(torch.load(MODEL_PATH))
+        W2V_PATH = 'fastText/crawl-300d-2M.vec'
+        infersent.set_w2v_path(W2V_PATH)
+        infersent.build_vocab_k_words(K=100000)
+
     vec, dialog_act = index
     path_prefix = os.path.join(dataset_path, split)
     reading_set_path = os.path.join(dataset_path, 'reading_sets', f'{split}.json')
@@ -170,8 +181,11 @@ def process_split(dataset_path, split, tokenizer, index, knowledge_policy):
                         if similarities[closest_knowledge_index] > 0.3:
                             knowledge_sentence = available_knowledge[closest_knowledge_index]
                             break
-                    else:
+                    elif knowledge_policy == "embeddings":
                         knowledge_sentence = emb_knowledge_selection(conv_id, sentence, vec)
+                        break
+                    else:
+                        knowledge_sentence = infersent_knowledge_selection(conv_id, sentence, vec, infersent)
                         break
                 else:
                     if knowledge_policy == "tf_idf":
@@ -196,6 +210,16 @@ def emb_knowledge_selection(conv_id, sentence, vec):
     knowledge = vec["knowledge_vecs"][conv_id]
     fact, sim = get_max_cosine_similarity(clean(sentence), knowledge, vec["emb_matrix"],
                                           vec["tokenizer"])
+    if sim > 0.7:
+        knowledge_sentence = fact
+    else:
+        knowledge_sentence = ""
+    return knowledge_sentence
+
+
+def infersent_knowledge_selection(conv_id, sentence, vec, infersent):
+    knowledge = vec["knowledge_vecs"][conv_id]
+    fact, sim = get_max_cosine_similarity_infersent(clean(sentence), knowledge, infersent)
     if sim > 0.7:
         knowledge_sentence = fact
     else:

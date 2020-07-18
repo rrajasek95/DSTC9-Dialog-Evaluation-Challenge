@@ -88,6 +88,18 @@ def get_max_cosine_similarity(message, knowledge_list, embedding_matrix, tokeniz
     return max_sim_fact, max_sim
 
 
+def get_max_cosine_similarity_infersent(message, knowledge_list, infersent):
+    embeddings = infersent.encode([message], tokenize=True)
+    message_embed = embeddings[0]
+    max_sim = 0
+    max_sim_fact = ""
+    for element in knowledge_list:
+        sim = get_cosine_similarity(message_embed, element[1])
+        if sim > max_sim:
+            max_sim = sim
+            max_sim_fact = element[0]
+    return max_sim_fact, max_sim
+
 def score_pos(pos):
     if pos in score_dict:
         return score_dict[pos]
