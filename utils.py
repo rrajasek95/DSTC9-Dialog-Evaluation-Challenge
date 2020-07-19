@@ -227,14 +227,28 @@ def infersent_knowledge_selection(conv_id, sentence, vec, infersent):
     return knowledge_sentence
 
 
+def load_infersent_vecs(knowledge_index_path):
+    splits = ['train', 'valid_freq', 'test_freq', 'test_rare', 'valid_rare']
+    vecs = {}
+    for split in splits:
+        data_path = os.path.join(knowledge_index_path, f'tc_knowledge_index_facebook_{split}.pkl')
+        with open(data_path, 'rb') as knowledge_index_file:
+            index_data = pickle.load(knowledge_index_file)
+            vecs.update(index_data['knowledge_vecs'])
+    return vecs
+
+
 def augmented_tc_dataset(tokenizer, dataset_path, dataset_cache, knowledge_index_path, dialog_act, knowledge_policy):
     dataset_cache = dataset_cache + '_augmented_' + type(tokenizer).__name__
-    with open(knowledge_index_path, 'rb') as knowledge_index_file:
-        index_data = pickle.load(knowledge_index_file)
-    if knowledge_policy == "tf_idf":
-        vec = index_data["vectorizer"]
+    if knowledge_policy == "infersent":
+        vec = load_infersent_vecs(knowledge_index_path)
     else:
-        vec = index_data
+        with open(knowledge_index_path, 'rb') as knowledge_index_file:
+            index_data = pickle.load(knowledge_index_file)
+        if knowledge_policy == "tf_idf":
+            vec = index_data["vectorizer"]
+        else:
+            vec = index_data
     if dataset_cache and os.path.isfile(dataset_cache):
         logger.info("Load tokenized dataset from cache at %s", dataset_cache)
         dataset = torch.load(dataset_cache)
