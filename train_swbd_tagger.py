@@ -12,6 +12,7 @@ can still be used to capture representations for spoken conversation.
 import argparse
 import json
 import math
+import os
 import pickle
 import random
 from collections import defaultdict
@@ -117,7 +118,8 @@ def train_loop(model, optimizer, loaders, vocab, args):
         run_train(model, optimizer, train_loader, args)
         run_eval(model, valid_loader, vocab, args)
 
-        torch.save(model.state_dict(), f'taggers/checkpoints/{args.model}_clf_{i + 1}.pt')
+        torch.save(model.state_dict(),
+                   os.path.join(args.checkpoint_directory, f'{args.model}_clf_{i + 1}.pt'))
 
 def prepare_batches(batch):
     dialogs, tag_seqs, lengths = zip(*batch)
@@ -180,6 +182,8 @@ if __name__ == '__main__':
     parser.add_argument('--infersent_w2v_path', default='taggers/fastText/crawl-300d-2M.vec')
     parser.add_argument('--switchboard_data_path', type=str, default="taggers/ready_data/v1/swda-corpus-V1.json",
                         help="Switchboard data directory")
+    parser.add_argument('--checkpoint_directory', default='taggers/checkpoints',
+                        help='Path to save model checkpoint')
     parser.add_argument("--local_rank", type=int, default=-1,
                         help="Local rank for distributed training (-1: not distributed)")
 
