@@ -85,6 +85,10 @@ class GPT2Classifier(nn.Module):
         hidden, _ = self.encoder(input_ids=inp_dict["input_ids"].to(self.device),
                                  attention_mask=inp_dict["attention_mask"].to(self.device),
                                  token_type_ids=inp_dict["token_type_ids"].to(self.device))
+        """
+        TODO: Implement version that makes use of hidden 
+            states from all layers 
+        """
         embed = hidden[:, -1, :]
         logits = self.linear(embed)
 
@@ -100,10 +104,12 @@ class GPT2Classifier(nn.Module):
 
 
 class InferSentCRFTagger(nn.Module):
-    def __init__(self, num_labels, model_path, w2v_path, infersent_params, device="cpu", join_train=True, verbose=False):
+    def __init__(self, num_labels, model_path, w2v_path, infersent_params,
+                 utterance_encoder_hidden_size,
+                 device="cpu", join_train=True, verbose=False):
         super(InferSentCRFTagger, self).__init__()
 
-        self.infersent = InferSent(infersent_params)
+        self.infersent = InferSent(infersent_params).to(device)
         self.infersent.load_state_dict(torch.load(model_path))
         self.infersent.set_w2v_path(w2v_path)
         self.infersent.build_vocab_k_words(K=100000)
@@ -112,16 +118,71 @@ class InferSentCRFTagger(nn.Module):
             for p in self.infersent.parameters():
                 p.requires_grad = False
 
-        self.crf = CRF(num_labels, batch_first=True)
+        self.dialog_encoder = nn.LSTM(input_size=infersent_params['enc_lstm_dim'] * 2,
+                                      hidden_size=utterance_encoder_hidden_size,
+                                      bidirectional=True,
+                                      batch_first=True).to(device)
 
+        self.linear = nn.Linear(utterance_encoder_hidden_size * 2, num_labels).to(device)
+        self.crf = CRF(num_labels, batch_first=True).to(device)
+        self.verbose = verbose
+        self.device = device
 
-    def forward(self, sentences, tags):
+    def bilstm_forward(self, dialogs):
+        """
+        We have dialogs as a List[List[str]] where outer list is of size batch_size.
+        The inner list will have lists of varying lengths
+        """
+        batch_size = len(dialogs)
+        max_seq_len = max(map(len, dialogs))
+        dlens = []
+
+        # We create a linearized sentence array
+        sentences = []
+
+        for i in range(batch_size):
+            dlen = len(dialogs[i])
+            dlens.append(dlen)
+
+            for j in range(max_seq_len):
+                if j < dlen:
+                    sentences.append(dialogs[i][j])
+                else:
+                    sentences.append("")
+
         sents, lengths, idx_sort = self.infersent.prepare_samples(sentences, bsize=len(sentences), tokenize=True,
                                                                   verbose=self.verbose)
 
         batch = self.infersent.get_batch(sents).to(self.device)
 
         embed = self.infersent((batch, lengths))
-
         idx_unsort = np.argsort(idx_sort)
         embeddings = embed[idx_unsort]
+        # embed: [batch_size * max_seq_len, sentence_embed_size]
+
+
+        lstm2_input = embeddings.view(batch_size, -1, embeddings.shape[-1])
+        # lstm2_input: [batch_size, max_seq_len, sentence_embed_size]
+
+        dialog_embedding, _ = self.dialog_encoder(lstm2_input)
+        # dialog_embedding: [batch_size, max_seq_len, utterance_encoder_hidden_size]
+
+        logits = self.linear(dialog_embedding)
+        # logits: [batch_size, max_seq_len, num_labels]
+        return logits
+
+    def forward(self, dialogs, tags, mask):
+        logits = self.bilstm_forward(dialogs)
+
+        score = self.crf(logits, tags, mask, reduction="mean")  # Mean reduction averages log-likelihood over the batch
+        loss = score * -1
+
+        return loss, logits
+
+    def decode(self, dialogs, mask):
+        logits = self.bilstm_forward(dialogs)
+
+        with torch.no_grad():
+            outputs = self.crf.decode(logits, mask)
+
+        return outputs

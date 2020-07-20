@@ -9,10 +9,13 @@ The key question is whether InferSent which is trained on translation corpora
 can still be used to capture representations for spoken conversation.
 - Rishi
 """
+import argparse
 import json
 import math
 import pickle
 import random
+from collections import defaultdict
+from itertools import chain
 
 import torch
 from sklearn.metrics import classification_report
@@ -23,14 +26,19 @@ from tqdm import tqdm
 
 from taggers.dataset import SwdaDataset
 from taggers.models import InferSentCRFTagger
-from train_util.metrics import RunningLambdaMetric, MetricLambda
+from train_util.metrics import RunningLambdaMetric, MetricLambda, RunningMetric
 
 
 def load_swbd_data(args):
     with open(args.switchboard_data_path, 'r') as switchboard_corpus_file:
         switchboard_data = json.load(switchboard_corpus_file)
 
-    return switchboard_data
+    split = defaultdict(list)
+
+    for conv in switchboard_data["conversations"]:
+        split[conv["partition_name"]].append(conv)
+
+    return split["train"], split["dev"]
 
 def run_train(model, optimizer, loader, args):
     running_loss = RunningMetric()
@@ -38,10 +46,11 @@ def run_train(model, optimizer, loader, args):
 
     model.train()
     for i, batch in tqdm(enumerate(loader)):
+        sents, tag_seqs, mask = batch
+        tag_seqs = tag_seqs.to(args.device)
+        mask = mask.to(args.device)
 
-        sents, y = batch
-
-        loss, _ = model(sents, y)
+        loss, _ = model(sents, tag_seqs, mask)
 
         running_loss.add(float(loss))
 
@@ -68,17 +77,27 @@ def run_eval(model, loader, vocab, args):
 
     all_preds = []
     all_labels = []
-    all_sents = []
     with torch.no_grad():
-        for i, batch in tqdm(enumerate(loader)):
-            sents, labels = batch
+        model.eval()
 
-            _, logits = model(sents)
-            predictions = logits.argmax(dim=-1)
-            all_sents += sents
-            all_preds += predictions.tolist()
-            all_labels += labels.tolist()
-            running_nll.add(logits.cpu(), labels)
+        for i, batch in tqdm(enumerate(loader)):
+            sents, tag_seqs, mask = batch
+            tag_seqs = tag_seqs.to(args.device)
+            mask = mask.to(args.device)
+
+            outputs = model.decode(sents, mask)
+            # Outputs will be a list [batch_size, var(seq_length)]
+            # To compute NLL we need it as a tensor
+            flat_outputs = list(chain(outputs))
+            op_tensor = torch.LongTensor(flat_outputs)
+
+            lab_tensor = tag_seqs.view(-1).cpu()
+            flat_labels = lab_tensor.nonzero().tolist()
+
+            all_preds += flat_outputs
+            all_labels += flat_labels
+
+            running_nll.add(op_tensor, lab_tensor)
 
     print("Validation:")
     print(f"NLL Loss: {running_nll.get()}")
@@ -100,6 +119,14 @@ def train_loop(model, optimizer, loaders, vocab, args):
 
         torch.save(model.state_dict(), f'taggers/checkpoints/{args.model}_clf_{i + 1}.pt')
 
+def prepare_batches(batch):
+    dialogs, tag_seqs, lengths = zip(*batch)
+
+    tensorized_tags = [torch.LongTensor(tag_seq) for tag_seq in tag_seqs]
+    padded_tag_seqs = torch.nn.utils.rnn.pad_sequence(tensorized_tags, batch_first=True, padding_value=0)
+    mask = padded_tag_seqs > 0  # EZ way to make a length mask
+    return dialogs, padded_tag_seqs, mask
+
 def train_infersent_crf_model(args):
     random.seed(args.seed)
     torch.manual_seed(args.seed)
@@ -111,9 +138,13 @@ def train_infersent_crf_model(args):
     params_model = {'bsize': 64, 'word_emb_dim': 300, 'enc_lstm_dim': 2048,
                     'pool_type': 'max', 'dpout_model': 0.0, 'version': V}
 
-    model = InferSentCRFTagger()
-
-
+    model = InferSentCRFTagger(train.num_labels(),
+                               args.infersent_model_path,
+                               args.infersent_w2v_path,
+                               params_model,
+                               300,
+                               args.device,
+                               join_train=args.joint_train)
 
     model.to(args.device)
 
@@ -135,4 +166,30 @@ def train_infersent_crf_model(args):
     train_loop(model, optimizer, (train_loader, valid_loader), train.vocab, args)
 
 if __name__ == '__main__':
-    pass
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-seed', type=int, default=42, help="Seed for training")
+    parser.add_argument('--lr', type=float, default=1e-4)
+    parser.add_argument('--batch_size', type=int, default=1)
+    parser.add_argument('--gradient_accumulation_steps', type=int, default=4)
+    parser.add_argument('--n_epochs', default=2, type=int)
+    parser.add_argument("--max_norm", type=float, default=1.0, help="Clipping gradient norm")
+    parser.add_argument('--joint_train', action="store_true")
+    parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu",
+                        help="Device (cuda or cpu)")
+    parser.add_argument('--infersent_model_path', default='taggers/encoder/infersent2.pkl')
+    parser.add_argument('--infersent_w2v_path', default='taggers/fastText/crawl-300d-2M.vec')
+    parser.add_argument('--switchboard_data_path', type=str, default="taggers/ready_data/v1/swda-corpus-V1.json",
+                        help="Switchboard data directory")
+    parser.add_argument("--local_rank", type=int, default=-1,
+                        help="Local rank for distributed training (-1: not distributed)")
+
+
+    args = parser.parse_args()
+
+    args.distributed = (args.local_rank != -1)
+    if args.distributed:
+        torch.cuda.set_device(args.local_rank)
+        args.device = torch.device("cuda", args.local_rank)
+        torch.distributed.init_process_group(backend='nccl', init_method='env://')
+
+    train_infersent_crf_model(args)
