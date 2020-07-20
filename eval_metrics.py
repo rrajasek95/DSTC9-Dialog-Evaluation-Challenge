@@ -211,6 +211,9 @@ if __name__ == '__main__':
 
     assert len(predictions) == len(references), "The number of predictions and references do not match!"
 
+    for prediction in predictions:
+        assert prediction != "", "Predictions cannot be empty!"
+
     metrics = [
         BLEUMetric(),
         RougeMetric(),
