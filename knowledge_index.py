@@ -79,8 +79,11 @@ def load_split_reading_set(data_file_path, split):
 
 def build_fb_embs_set(reading_set, infersent, knowledge_convo_embs):
 
+    convo_sets = []
+    all_knowledge_sents = []
     for conv_id, data in reading_set.items():
-        knowledge_sents = extract_fact_set(data["agent_1"])
+        knowledge_sents = []
+        knowledge_sents += extract_fact_set(data["agent_1"])
         knowledge_sents += extract_fact_set(data["agent_2"])
 
         article_data = data["article"]
@@ -95,11 +98,16 @@ def build_fb_embs_set(reading_set, infersent, knowledge_convo_embs):
                     continue
                 knowledge_sents.append(clean(sentence))
 
-        knowledge_convo_embs[conv_id] = []
         for sent in knowledge_sents:
-            embeddings = infersent.encode([sent], tokenize=True)
-            knowledge_convo_embs[conv_id].append([sent, embeddings[0]])
+            convo_sets.append(conv_id)
+        all_knowledge_sents += knowledge_sents
 
+    embeddings = infersent.encode(all_knowledge_sents, tokenize=True)
+    for i in range(len(all_knowledge_sents)):
+        convo_id = convo_sets[i]
+        if convo_id not in knowledge_convo_embs:
+            knowledge_convo_embs[convo_id] = []
+        knowledge_convo_embs[convo_id].append([all_knowledge_sents[i], embeddings[i]])
     return knowledge_convo_embs
 
 
@@ -201,7 +209,14 @@ def build_topical_chats_knowledge_index_facebook(args):
         'alexa-prize-topical-chat-dataset',
     )
 
-    splits = ['train', 'valid_freq', 'valid_rare', 'test_freq', 'test_rare']
+    splits = [
+        'train',
+        'valid_freq',
+        'valid_rare',
+        'test_freq',
+        'test_rare'
+    ]
+
 
     V = 2
     MODEL_PATH = 'encoder/infersent%s.pkl' % V
@@ -214,10 +229,11 @@ def build_topical_chats_knowledge_index_facebook(args):
 
     infersent.build_vocab_k_words(K=100000)
     knowledge_convo_embs = {}
-
+    reading_sets = {}
     for split in splits:
-        split_reading_set = load_split_reading_set(data_file_path, split)
-        knowledge_convo_embs = build_fb_embs_set(split_reading_set, infersent, knowledge_convo_embs)
+        reading_sets.update(load_split_reading_set(data_file_path, split))
+
+    knowledge_convo_embs = build_fb_embs_set(reading_sets, infersent, knowledge_convo_embs)
 
     knowledge_index_path = os.path.join(args.data_dir, 'tc_processed', 'tc_knowledge_index_facebook.pkl')
 
