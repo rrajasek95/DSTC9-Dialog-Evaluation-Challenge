@@ -39,8 +39,11 @@ class HierarchicalDaPredictor(nn.Module):
         super(HierarchicalDaPredictor, self).__init__()
         self.speaker_embeddings = nn.Embedding(3, params['speaker_embedding_dim'], padding_idx=0)
 
+        # TODO: utterance and da encoders need embeddings, since they operate on words and labels
         self.utterance_encoder = Encoder(params['utt_encoder'])
         self.da_encoder = Encoder(params['da_encoder'])
+
+        # TODO: Context encoder should not have an embedding layer
         self.context_encoder = Encoder(params['context_encoder'])
 
         context_hidden_size = params['context_encoder']['hidden_dim']
