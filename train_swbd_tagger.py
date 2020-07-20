@@ -72,9 +72,9 @@ def run_train(model, optimizer, loader, args):
 def run_eval(model, loader, vocab, args):
     model.eval()
 
-    running_nll = RunningLambdaMetric(CrossEntropyLoss())
+    running_loss = RunningMetric()
 
-    ppl = MetricLambda(math.exp, running_nll)
+    ppl = MetricLambda(math.exp, running_loss)
 
     all_preds = []
     all_labels = []
@@ -86,22 +86,24 @@ def run_eval(model, loader, vocab, args):
             tag_seqs = tag_seqs.to(args.device)
             mask = mask.to(args.device)
 
-            outputs = model.decode(sents, mask)
             # Outputs will be a list [batch_size, var(seq_length)]
             # To compute NLL we need it as a tensor
-            flat_outputs = list(chain(outputs))
-            op_tensor = torch.LongTensor(flat_outputs)
+            loss, logits = model(sents, tag_seqs, mask)
+            outputs = model.crf.decode(logits, mask)
 
-            lab_tensor = tag_seqs.view(-1).cpu()
-            flat_labels = lab_tensor.nonzero().tolist()
+            flat_outputs = list(chain.from_iterable(outputs))
 
+
+            # lab_tensor = tag_seqs.view(-1).cpu()
+            flat_seq = tag_seqs.view(-1)
+            flat_labels = list(chain.from_iterable(flat_seq[flat_seq.nonzero()].tolist()))
             all_preds += flat_outputs
             all_labels += flat_labels
 
-            running_nll.add(op_tensor, lab_tensor)
+            running_loss.add(loss)
 
     print("Validation:")
-    print(f"NLL Loss: {running_nll.get()}")
+    print(f"NLL Loss: {running_loss.get()}")
     print(f"Perplexity: {ppl.get()}")
     print(f"Classification report")
 
@@ -169,7 +171,8 @@ def train_infersent_crf_model(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-seed', type=int, default=42, help="Seed for training")
+    parser.add_argument('--model', type=str, default="infersent")
+    parser.add_argument('--seed', type=int, default=42, help="Seed for training")
     parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument('--gradient_accumulation_steps', type=int, default=4)
