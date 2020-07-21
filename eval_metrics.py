@@ -217,18 +217,65 @@ class USRMetric(ReferenceFreeMetric):
 
         return y.tolist()
 
-    def __init__(self, context_file, hypothesis_file):
-        scoring_file = self._make_scoring_file(context_file, hypothesis_file)
-        mlm_scores = self.compute_mlm_scores(scoring_file, hypothesis_file)
-        dr_c_scores = None
-        dr_f_scores = None
 
+    def _compute_dr_score(self, args):
+        from usr.examples.train_understandable import MODEL_CLASSES, WEIGHTS_NAME, predict
+
+        config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
+        tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
+        checkpoints = [args.output_dir]
+        preds = None
+        if args.eval_all_checkpoints:
+            checkpoints = list(
+                os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + '/**/' + WEIGHTS_NAME, recursive=True)))
+            logging.getLogger("transformers.modeling_utils").setLevel(logging.WARN)  # Reduce logging
+        for checkpoint in checkpoints:
+            global_step = checkpoint.split('-')[-1] if len(checkpoints) > 1 else ""
+            prefix = checkpoint.split('/')[-1] if checkpoint.find('checkpoint') != -1 else ""
+
+            model = model_class.from_pretrained(checkpoint)
+            model.to(args.device)
+
+            preds = predict(args, model, tokenizer, args.data_dir, prefix=prefix)
+
+        return preds
+
+    def make_args(self, model_path, scoring_file):
+        args = argparse.Namespace()
+        args.per_gpu_eval_batch_size = 1
+        args.output_dir = model_path
+        args.model_type = "roberta"
+        args.model_name_or_path = "roberta-base"
+        args.data_dir = scoring_file
+        args.do_eval = True
+        args.task_name = "qqp"
+        args.do_lower_case = False
+        args.device = "cuda"
+        args.eval_all_checkpoints = False
+        args.max_seq_length = 128
+        return args
+
+    def _compute_dr_c_score(self, scoring_file):
+        args = self.make_args("usr/examples/ctx", scoring_file)
+        preds = self._compute_dr_score(args)
+        return preds
+
+    def _compute_dr_f_score(self, scoring_file):
+        args = self.make_args("usr/examples/uk", scoring_file)
+        return self._compute_dr_score(args)
+
+    def __init__(self, context_file, fact_file, hypothesis_file):
+        lm_scoring_file = self._make_scoring_file(context_file, hypothesis_file)
+        dr_scoring_file = self._make_dr_scoring_file(context_file, fact_file, hypothesis_file)
+        mlm_scores = self.compute_mlm_scores(lm_scoring_file)
+        dr_c_scores = self._compute_dr_c_score(dr_scoring_file)
+        dr_f_scores = self._compute_dr_f_score(dr_scoring_file)
         usr_scores = self._compute_regression_scores(mlm_scores, dr_c_scores, dr_f_scores)
 
         self.results = usr_scores
 
-    def compute_mlm_scores(self, scoring_file, hypothesis_file):
-        args = self.build_args(hypothesis_file, scoring_file)
+    def compute_mlm_scores(self, scoring_file):
+        args = self.build_args(scoring_file)
         from usr.examples.run_lm_finetuning import evaluate, MODEL_CLASSES, WEIGHTS_NAME
         config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
         config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path,
@@ -262,11 +309,11 @@ class USRMetric(ReferenceFreeMetric):
             # results.update(result)
         return result
 
-    def build_args(self, hypothesis_file, scoring_file):
+    def build_args(self, scoring_file):
         args = argparse.Namespace()
         args.output_dir = 'usr/examples/roberta_ft'
         args.model_type = 'roberta'
-        args.train_data_file = hypothesis_file
+        args.train_data_file = scoring_file
         args.per_gpu_eval_batch_size = 1
         args.model_name_or_path = 'roberta-base'
         args.eval_data_file = scoring_file
@@ -289,6 +336,10 @@ class USRMetric(ReferenceFreeMetric):
     def compute(self, hypotheses):
         return sum(self.results) / len(self.results) if len(self.results) > 0 else 0
 
+    def _make_dr_scoring_file(self, context_file, fact_file, hypothesis_file):
+        pass
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
@@ -305,6 +356,11 @@ if __name__ == '__main__':
                         type=str,
                         default='processed_output/valid_freq.tgt',
                         help='File containing the reference responses')
+    parser.add_argument('--fact_file',
+                        type=str,
+                        default='processed_output/valid_freq.fct',
+                        help='File containing reference facts')
+
     args = parser.parse_args()
 
     with open(args.predictions_file, 'r') as predictions_file:
@@ -335,7 +391,7 @@ if __name__ == '__main__':
         CorpusNGramDiversity(n=1),
         CorpusNGramDiversity(n=2),
         NLGEval(args.predictions_file, args.references_file),
-        USRMetric(args.context_file, args.predictions_file)
+        USRMetric(args.context_file, args.fact_file, args.predictions_file)
     ]
 
     print(f"Number of examples n={len(predictions)}\n")
