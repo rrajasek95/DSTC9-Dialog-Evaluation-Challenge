@@ -253,6 +253,10 @@ class USRMetric(ReferenceFreeMetric):
         args.device = "cuda"
         args.eval_all_checkpoints = False
         args.max_seq_length = 128
+        args.local_rank = -1
+        args.n_gpu = 1
+        args.overwrite_cache = True
+        args.output_mode = 'classification' # QQP task uses classification
         return args
 
     def _compute_dr_c_score(self, scoring_file):
@@ -319,7 +323,7 @@ class USRMetric(ReferenceFreeMetric):
         args.eval_data_file = scoring_file
         args.do_eval = True
         args.mlm = True
-        args.device = "cpu"
+        args.device = "cuda"
         args.local_rank = -1
         args.n_gpu = 0
         args.config_name = ""
@@ -337,8 +341,16 @@ class USRMetric(ReferenceFreeMetric):
         return sum(self.results) / len(self.results) if len(self.results) > 0 else 0
 
     def _make_dr_scoring_file(self, context_file, fact_file, hypothesis_file):
-        pass
+        scratch_dir = 'submissions/'
+        scratch_path = scratch_dir + 'dev.tsv'
+        with open(context_file, 'r') as ctx, open(fact_file, 'r') as fct, open(hypothesis_file) as resp, open(scratch_path, 'w') as scratch_file:
+            contexts = [line.strip() for line in ctx]
+            facts = [line.strip() for line in fct]
+            responses = [line.strip() for line in resp]
 
+            for (c, f, r) in zip(contexts, facts, responses):
+                scratch_file.write(f'0\t1\t2\t{c} {f} _eos\t_go {r}\t0\n')
+        return scratch_dir
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
