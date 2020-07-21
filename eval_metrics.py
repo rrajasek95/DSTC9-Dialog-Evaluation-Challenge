@@ -8,6 +8,7 @@ import argparse
 import glob
 import logging
 import os
+import pickle
 import pprint
 from collections import Counter
 
@@ -15,7 +16,7 @@ import nlgeval
 import nlp
 import nltk
 from nltk import meteor
-
+import numpy as np
 
 class ReferenceMetric(object):
     """
@@ -206,13 +207,27 @@ class USRMetric(ReferenceFreeMetric):
 
         return scratch_path
 
+    def _compute_regression_scores(self, mlm_score, dr_c_scores, dr_f_scores):
+        # Understandable (MLM), Natural (MLM), Maintains Context (DR-c), Interesting (DR-c), Uses Knowledge (DR-f)
+        X = np.array([mlm_score, mlm_score, dr_c_scores, dr_c_scores, dr_f_scores]).T
+
+        with open('usr/examples/regr.pkl', 'rb') as regression_model_file:
+            model = pickle.load(regression_model_file)
+        y = model.predict(X)
+
+        return y.tolist()
+
     def __init__(self, context_file, hypothesis_file):
-        scores = self.compute_mlm_scores(context_file, hypothesis_file)
-
-        self.results = scores
-
-    def compute_mlm_scores(self, context_file, hypothesis_file):
         scoring_file = self._make_scoring_file(context_file, hypothesis_file)
+        mlm_scores = self.compute_mlm_scores(scoring_file, hypothesis_file)
+        dr_c_scores = None
+        dr_f_scores = None
+
+        usr_scores = self._compute_regression_scores(mlm_scores, dr_c_scores, dr_f_scores)
+
+        self.results = usr_scores
+
+    def compute_mlm_scores(self, scoring_file, hypothesis_file):
         args = self.build_args(hypothesis_file, scoring_file)
         from usr.examples.run_lm_finetuning import evaluate, MODEL_CLASSES, WEIGHTS_NAME
         config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
@@ -272,7 +287,7 @@ class USRMetric(ReferenceFreeMetric):
         return 'USR Metric Fine-tuned on Topical Chats'
 
     def compute(self, hypotheses):
-        return self.results
+        return sum(self.results) / len(self.results) if len(self.results) > 0 else 0
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
