@@ -100,6 +100,22 @@ def get_max_cosine_similarity_infersent(message, knowledge_list, infersent):
             max_sim_fact = element[0]
     return max_sim_fact, max_sim
 
+
+def get_cosine_similarity_infersent_all(message, knowledge_list, infersent):
+    embeddings = infersent.encode([message], tokenize=True)
+    message_embed = embeddings[0]
+    return_array = []
+    knowledge_set = set()
+    for element in knowledge_list:
+        if (element[0]) not in knowledge_set:
+            knowledge_set.add(element[0])
+            new_array = [element[0]]
+            sim = get_cosine_similarity(message_embed, element[1])
+            new_array.append(sim)
+            return_array.append(new_array)
+
+    return return_array
+
 def score_pos(pos):
     if pos in score_dict:
         return score_dict[pos]

@@ -10,7 +10,7 @@ from sklearn.metrics.pairwise import linear_kernel
 from tqdm import tqdm
 from glove.glove_utils import get_max_cosine_similarity, get_max_cosine_similarity_infersent
 from encoder.fb_models import InferSent
-from knowledge_index import extract_fact_set, clean
+from knowledge_index import clean
 
 CONFIG_NAME = 'config.json'
 

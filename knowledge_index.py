@@ -98,9 +98,13 @@ def build_fb_embs_set(reading_set, infersent, knowledge_convo_embs):
                     continue
                 knowledge_sents.append(clean(sentence))
 
+        knowledge_set = set()
         for sent in knowledge_sents:
-            convo_sets.append(conv_id)
-        all_knowledge_sents += knowledge_sents
+            if sent not in knowledge_set:
+                knowledge_set.add(sent)
+                convo_sets.append(conv_id)
+        sents = list(knowledge_set)
+        all_knowledge_sents += sents
 
     embeddings = infersent.encode(all_knowledge_sents, tokenize=True)
     for i in range(len(all_knowledge_sents)):
