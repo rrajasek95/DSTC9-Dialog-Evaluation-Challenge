@@ -88,6 +88,8 @@ class GPT2Classifier(nn.Module):
         """
         TODO: Implement version that makes use of hidden 
             states from all layers 
+            
+        TODO: We are currently picking hidden state at max_seq_len, instead pick last state for each turn
         """
         embed = hidden[:, -1, :]
         logits = self.linear(embed)

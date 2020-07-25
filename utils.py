@@ -10,7 +10,7 @@ from sklearn.metrics.pairwise import linear_kernel
 from tqdm import tqdm
 from glove.glove_utils import get_max_cosine_similarity, get_max_cosine_similarity_infersent
 from encoder.fb_models import InferSent
-from knowledge_index import extract_fact_set, clean
+from knowledge_index import clean
 
 CONFIG_NAME = 'config.json'
 
@@ -220,7 +220,7 @@ def emb_knowledge_selection(conv_id, sentence, vec):
 def infersent_knowledge_selection(conv_id, sentence, vec, infersent):
     knowledge = vec[conv_id]
     fact, sim = get_max_cosine_similarity_infersent(clean(sentence), knowledge, infersent)
-    if sim > 0.3:
+    if sim > 0.6:
         knowledge_sentence = fact
     else:
         knowledge_sentence = ""

@@ -5,13 +5,18 @@ such as F1, BLEU-4, ROUGE-L, METEOR, etc. to be computed
 against a set of reference responses.
 """
 import argparse
+import glob
+import logging
+import os
+import pickle
 import pprint
 from collections import Counter
 
+import nlgeval
 import nlp
 import nltk
-import nlgeval
 from nltk import meteor
+import numpy as np
 
 class ReferenceMetric(object):
     """
@@ -160,7 +165,7 @@ class CorpusNGramDiversity(ReferenceFreeMetric):
     def __repr__(self):
         return f'Corpus {self.n}-gram diversity'
 
-class NLGEval(ReferenceFreeMetric):
+class NLGEval(ReferenceMetric):
     """
     Runs the full NLGEval pipeline which computes multiple machine translation
     metrics:
@@ -178,15 +183,183 @@ class NLGEval(ReferenceFreeMetric):
         self.metrics_dict = nlgeval.compute_metrics(hypothesis=hypothesis_file,
                                                     references=[reference_file], no_skipthoughts=True, no_glove=True)
     def __repr__(self):
-        return 'NLGEval metrics:'
+        return 'NLGEval metrics'
+
+    def compute(self, hypotheses, references):
+        return pprint.pformat(self.metrics_dict)
+
+class USRMetric(ReferenceFreeMetric):
+    """
+    Computes the USR score as defined by Mehri and Eskenazi (2019)
+
+    Currently the code computes the following:
+    1. MLM objective
+    """
+    def _make_scoring_file(self, context_file, hypothesis_file):
+
+        scratch_path = 'submissions/scratch'
+        with open(context_file, 'r') as context_, open(hypothesis_file, 'r') as hypothesis_, open(scratch_path, 'w') as scratch_file:
+            context_lines = [line.strip() for line in context_]
+            hypothesis_lines = [line.strip() for line in hypothesis_]
+
+            for (c, h) in zip(context_lines, hypothesis_lines):
+                scratch_file.writelines(f'{c} _eos _go {h}\n')
+
+        return scratch_path
+
+    def _compute_regression_scores(self, mlm_score, dr_c_scores, dr_f_scores):
+        # Understandable (MLM), Natural (MLM), Maintains Context (DR-c), Interesting (DR-c), Uses Knowledge (DR-f)
+        X = np.array([mlm_score, mlm_score, dr_c_scores, dr_c_scores, dr_f_scores]).T
+
+        with open('usr/examples/regr.pkl', 'rb') as regression_model_file:
+            model = pickle.load(regression_model_file)
+        y = model.predict(X)
+
+        return y.tolist()
+
+
+    def _compute_dr_score(self, args):
+        from usr.examples.train_understandable import MODEL_CLASSES, WEIGHTS_NAME, predict
+
+        config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
+        tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
+        checkpoints = [args.output_dir]
+        preds = None
+        if args.eval_all_checkpoints:
+            checkpoints = list(
+                os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + '/**/' + WEIGHTS_NAME, recursive=True)))
+            logging.getLogger("transformers.modeling_utils").setLevel(logging.WARN)  # Reduce logging
+        for checkpoint in checkpoints:
+            global_step = checkpoint.split('-')[-1] if len(checkpoints) > 1 else ""
+            prefix = checkpoint.split('/')[-1] if checkpoint.find('checkpoint') != -1 else ""
+
+            model = model_class.from_pretrained(checkpoint)
+            model.to(args.device)
+
+            preds = predict(args, model, tokenizer, args.data_dir, prefix=prefix)
+
+        return preds
+
+    def make_args(self, model_path, scoring_file):
+        args = argparse.Namespace()
+        args.per_gpu_eval_batch_size = 1
+        args.output_dir = model_path
+        args.model_type = "roberta"
+        args.model_name_or_path = "roberta-base"
+        args.data_dir = scoring_file
+        args.do_eval = True
+        args.task_name = "qqp"
+        args.do_lower_case = False
+        args.device = "cuda"
+        args.eval_all_checkpoints = False
+        args.max_seq_length = 128
+        args.local_rank = -1
+        args.n_gpu = 1
+        args.overwrite_cache = True
+        args.output_mode = 'classification' # QQP task uses classification
+        return args
+
+    def _compute_dr_c_score(self, scoring_file):
+        args = self.make_args("usr/examples/ctx", scoring_file)
+        preds = self._compute_dr_score(args)
+        return preds
+
+    def _compute_dr_f_score(self, scoring_file):
+        args = self.make_args("usr/examples/uk", scoring_file)
+        return self._compute_dr_score(args)
+
+    def __init__(self, context_file, fact_file, hypothesis_file):
+        lm_scoring_file = self._make_scoring_file(context_file, hypothesis_file)
+        dr_scoring_file = self._make_dr_scoring_file(context_file, fact_file, hypothesis_file)
+        mlm_scores = self.compute_mlm_scores(lm_scoring_file)
+        dr_c_scores = self._compute_dr_c_score(dr_scoring_file)
+        dr_f_scores = self._compute_dr_f_score(dr_scoring_file)
+        usr_scores = self._compute_regression_scores(mlm_scores, dr_c_scores, dr_f_scores)
+
+        self.results = usr_scores
+
+    def compute_mlm_scores(self, scoring_file):
+        args = self.build_args(scoring_file)
+        from usr.examples.run_lm_finetuning import evaluate, MODEL_CLASSES, WEIGHTS_NAME
+        config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
+        config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path,
+                                              cache_dir=args.cache_dir if args.cache_dir else None)
+        tokenizer = tokenizer_class.from_pretrained(
+            args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
+            do_lower_case=args.do_lower_case,
+            cache_dir=args.cache_dir if args.cache_dir else None)
+        if args.block_size <= 0:
+            args.block_size = tokenizer.max_len_single_sentence
+        model = model_class.from_pretrained(args.model_name_or_path,
+                                            from_tf=bool('.ckpt' in args.model_name_or_path),
+                                            config=config,
+                                            cache_dir=args.cache_dir if args.cache_dir else None)
+        model.to(args.device)
+        result = None
+        checkpoints = [args.output_dir]
+        if args.eval_all_checkpoints:
+            checkpoints = list(
+                os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + '/**/' + WEIGHTS_NAME, recursive=True)))
+            logging.getLogger("transformers.modeling_utils").setLevel(logging.WARN)  # Reduce logging
+        for checkpoint in checkpoints:
+            global_step = checkpoint.split('-')[-1] if len(checkpoints) > 1 else ""
+            prefix = checkpoint.split('/')[-1] if checkpoint.find('checkpoint') != -1 else ""
+
+            model = model_class.from_pretrained(checkpoint)
+            model.to(args.device)
+            result = evaluate(args, model, tokenizer, prefix=prefix)
+
+            # result = dict((k + '_{}'.format(global_step), v) for k, v in result.items())
+            # results.update(result)
+        return result
+
+    def build_args(self, scoring_file):
+        args = argparse.Namespace()
+        args.output_dir = 'usr/examples/roberta_ft'
+        args.model_type = 'roberta'
+        args.train_data_file = scoring_file
+        args.per_gpu_eval_batch_size = 1
+        args.model_name_or_path = 'roberta-base'
+        args.eval_data_file = scoring_file
+        args.do_eval = True
+        args.mlm = True
+        args.device = "cuda"
+        args.local_rank = -1
+        args.n_gpu = 0
+        args.config_name = ""
+        args.cache_dir = ""
+        args.tokenizer_name = ""
+        args.do_lower_case = False
+        args.eval_all_checkpoints = False
+        args.block_size = -1
+        return args
+
+    def __repr__(self):
+        return 'USR Metric Fine-tuned on Topical Chats'
 
     def compute(self, hypotheses):
-        return pprint.pformat(self.metrics_dict)
+        return sum(self.results) / len(self.results) if len(self.results) > 0 else 0
+
+    def _make_dr_scoring_file(self, context_file, fact_file, hypothesis_file):
+        scratch_dir = 'submissions/'
+        scratch_path = scratch_dir + 'dev.tsv'
+        with open(context_file, 'r') as ctx, open(fact_file, 'r') as fct, open(hypothesis_file) as resp, open(scratch_path, 'w') as scratch_file:
+            contexts = [line.strip() for line in ctx]
+            facts = [line.strip() for line in fct]
+            responses = [line.strip() for line in resp]
+
+            for (c, f, r) in zip(contexts, facts, responses):
+                scratch_file.write(f'0\t1\t2\t{c} {f} _eos\t_go {r}\t0\n')
+        return scratch_dir
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     # Currently support only single hypotheses scoring
+    parser.add_argument('--context_file',
+                        type=str,
+                        default='processed_output/valid_freq.src')
+
     parser.add_argument('--predictions_file',
                         type=str,
                         default="submissions/submissions.txt",
@@ -195,6 +368,11 @@ if __name__ == '__main__':
                         type=str,
                         default='processed_output/valid_freq.tgt',
                         help='File containing the reference responses')
+    parser.add_argument('--fact_file',
+                        type=str,
+                        default='processed_output/valid_freq.fct',
+                        help='File containing reference facts')
+
     args = parser.parse_args()
 
     with open(args.predictions_file, 'r') as predictions_file:
@@ -224,7 +402,8 @@ if __name__ == '__main__':
         NGramDiversity(n=2),
         CorpusNGramDiversity(n=1),
         CorpusNGramDiversity(n=2),
-        NLGEval(args.predictions_file, args.references_file)
+        NLGEval(args.predictions_file, args.references_file),
+        USRMetric(args.context_file, args.fact_file, args.predictions_file)
     ]
 
     print(f"Number of examples n={len(predictions)}\n")

@@ -1,7 +1,8 @@
 import string
 import numpy as np
 from glove.glove_utils import get_max_cosine_similarity
-
+from elasticsearch import Elasticsearch
+from elasticsearch_dsl import Search
 
 class TfIdfRankerRetriever(object):
     """
@@ -47,3 +48,17 @@ class EmbRankerRetriever(object):
         knowledge = self.knowledge_vecs[convo_tag]
         fact = get_max_cosine_similarity(query, knowledge, self.emb_matrix, self.tokenizer)
         return fact
+
+class ElasticRankerRetriever(object):
+    """
+    Used to implement a more general knowledge retriever
+    for querying elasticsearch for data
+    """
+    def __init__(self, elastic_client: Elasticsearch):
+        self.client = elastic_client
+
+    def get_top_n(self, query, n=5):
+        s = Search(using=self.client,
+                   index="topical-knowledge")
+
+        response = s.execute()
