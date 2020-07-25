@@ -24,7 +24,7 @@ def load_data(dataset_path, split, training_configuration):
     src = [l.strip().split("_eos")[:-1] for l in open(path_prefix + '.src').readlines()]
     tgt = [l.strip().replace("_go", "").replace("_eos", "") for l in open(path_prefix + '.tgt').readlines()]
     fct = [l.strip() for l in open(path_prefix + '.fct').readlines()]
-    if training_configuration != "baseline" and split in ["train", "valid_freq"]:
+    if training_configuration != "baseline":
         history_da = [l.strip().split("_eos")[:-1] for l in open(path_prefix + ".src.da").readlines()]
         history_knowledge = itertools.repeat(itertools.repeat(""))
         # history_knowledge = [l.strip().split("_eos")[:-1] for l in open(path_prefix + ".src.fct")]
