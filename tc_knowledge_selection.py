@@ -10,7 +10,7 @@ import torch
 from nltk import word_tokenize
 
 from encoder.fb_models import InferSent
-from glove.glove_utils import get_max_cosine_similarity_infersent, get_cosine_similarity_embs_all
+from glove.glove_utils import get_cosine_similarity_embs_all
 from knowledge_index import extract_fact_set, clean
 from sentence_transformers import SentenceTransformer
 

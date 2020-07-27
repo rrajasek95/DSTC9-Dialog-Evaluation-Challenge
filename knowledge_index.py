@@ -258,11 +258,11 @@ def build_topical_chats_knowledge_index_bert(args):
     )
 
     splits = [
-        # 'train',
-        # 'valid_freq',
-        # 'valid_rare',
+        'train',
+        'valid_freq',
+        'valid_rare',
         'test_freq',
-        # 'test_rare'
+        'test_rare'
     ]
 
     model = SentenceTransformer('bert-base-nli-stsb-mean-tokens')
@@ -273,7 +273,7 @@ def build_topical_chats_knowledge_index_bert(args):
 
     knowledge_convo_embs = build_sent_model_embs_set(reading_sets, model, knowledge_convo_embs, args.knowledge_policy)
 
-    knowledge_index_path = os.path.join(args.data_dir, 'tc_processed', 'tc_knowledge_index_bert_test_freq.pkl')
+    knowledge_index_path = os.path.join(args.data_dir, 'tc_processed', 'tc_knowledge_index_bert_all.pkl')
 
     with open(knowledge_index_path, 'wb') as knowledge_index_file:
         pickle.dump({
