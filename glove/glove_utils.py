@@ -88,8 +88,11 @@ def get_max_cosine_similarity(message, knowledge_list, embedding_matrix, tokeniz
     return max_sim_fact, max_sim
 
 
-def get_max_cosine_similarity_infersent(message, knowledge_list, infersent):
-    embeddings = infersent.encode([message], tokenize=True)
+def get_max_cosine_similarity_infersent(message, knowledge_list, model, knowledge_policy="infersent"):
+    if knowledge_policy == "infersent":
+        embeddings = model.encode([message], tokenize=True)
+    else:
+        embeddings = model.encode([message])
     message_embed = embeddings[0]
     max_sim = 0
     max_sim_fact = ""
@@ -101,8 +104,11 @@ def get_max_cosine_similarity_infersent(message, knowledge_list, infersent):
     return max_sim_fact, max_sim
 
 
-def get_cosine_similarity_infersent_all(message, knowledge_list, infersent):
-    embeddings = infersent.encode([message], tokenize=True)
+def get_cosine_similarity_embs_all(message, knowledge_list, model, knowledge_policy="infersent"):
+    if knowledge_policy == "infersent":
+        embeddings = model.encode([message], tokenize=True)
+    else:
+        embeddings = model.encode([message])
     message_embed = embeddings[0]
     return_array = []
     knowledge_set = set()
@@ -113,7 +119,6 @@ def get_cosine_similarity_infersent_all(message, knowledge_list, infersent):
             sim = get_cosine_similarity(message_embed, element[1])
             new_array.append(sim)
             return_array.append(new_array)
-
     return return_array
 
 def score_pos(pos):
