@@ -145,7 +145,7 @@ def get_loader(args, tokenizer):
         topical_chat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache, args.training_configuration)
     else:
         topical_chat = augmented_tc_dataset(tokenizer, args.dataset_path, args.dataset_cache,
-                                            args.knowledge_index_path, args.training_configuration)
+                                            args.knowledge_index_path, args.training_configuration, args.knowledge_policy)
     splits = list(topical_chat.keys())
     for split in splits:
         if split != args.split:
@@ -254,6 +254,7 @@ if __name__ == '__main__':
                         help="Nucleus filtering (top-p) before sampling (<=0.0: no filtering)")
     parser.add_argument("--no_sample", action='store_true', help="Set to use greedy decoding instead of sampling")
     parser.add_argument("--max_length", type=int, default=50, help="Maximum length of the output utterances")  # 95% of the reply lengths do not exceed 50
+    parser.add_argument("--knowledge_policy", type=str, default="bert", choices=["tf_idf", "embeddings", "infersent", "bert"])
 
     args = parser.parse_args()
     args.distributed = (args.local_rank != -1)
