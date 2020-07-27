@@ -38,14 +38,14 @@ def analyze_knowledge_selection_data(args):
 
     plt.title('ROC curve for knowledge selection threshold')
     threshold_df = pd.DataFrame({'true_positive_rate': tpr, 'false_positive_rate': fpr, 'threshold': thresholds})
-    threshold_df.to_csv('tdidf_threshold.csv',index=False)
+    threshold_df.to_csv('bert_threshold.csv',index=False)
 
     plt.show()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_file',
-                        default='test_freq_tfidf - test_freq_tfidf.csv',
+                        default='test_freq_bert - test_freq_bert.csv',
                         help='File that contains knowledge data to analyze')
 
     args = parser.parse_args()

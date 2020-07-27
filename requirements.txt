@@ -126,6 +126,7 @@ seaborn==0.10.1
 segtok==1.5.10
 Send2Trash==1.5.0
 sentencepiece==0.1.91
+sentence-transformers==0.3.2
 six==1.15.0
 smart-open==2.0.0
 spacy==2.0.12
@@ -148,7 +149,7 @@ tornado==6.0.4
 tornado-swagger==1.2.4
 tqdm==4.46.1
 traitlets==4.3.3
-transformers==2.11.0
+transformers==3.0.2
 ujson # @ file:///tmp/build/80754af9/ujson_1592441221780/work
 urllib3==1.25.9
 wcwidth # @ file:///tmp/build/80754af9/wcwidth_1593447189090/work

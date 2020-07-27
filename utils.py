@@ -11,6 +11,8 @@ from tqdm import tqdm
 from glove.glove_utils import get_max_cosine_similarity, get_max_cosine_similarity_infersent
 from encoder.fb_models import InferSent
 from knowledge_index import clean
+from sentence_transformers import SentenceTransformer
+
 
 CONFIG_NAME = 'config.json'
 
@@ -109,7 +111,8 @@ def process_split(dataset_path, split, tokenizer, index, knowledge_policy):
         W2V_PATH = 'fastText/crawl-300d-2M.vec'
         infersent.set_w2v_path(W2V_PATH)
         infersent.build_vocab_k_words(K=100000)
-
+    elif knowledge_policy == "bert":
+        bert_model = SentenceTransformer('bert-base-nli-stsb-mean-tokens')
     vec, dialog_act = index
     path_prefix = os.path.join(dataset_path, split)
     reading_set_path = os.path.join(dataset_path, 'reading_sets', f'{split}.json')
@@ -184,6 +187,9 @@ def process_split(dataset_path, split, tokenizer, index, knowledge_policy):
                     elif knowledge_policy == "embeddings":
                         knowledge_sentence = emb_knowledge_selection(conv_id, sentence, vec)
                         break
+                    elif knowledge_policy == "bert":
+                        knowledge_sentence = bert_knowledge_selection(conv_id, sentence, vec, bert_model)
+                        break
                     else:
                         knowledge_sentence = infersent_knowledge_selection(conv_id, sentence, vec, infersent)
                         break
@@ -226,6 +232,15 @@ def infersent_knowledge_selection(conv_id, sentence, vec, infersent):
         knowledge_sentence = ""
     return knowledge_sentence
 
+
+def bert_knowledge_selection(conv_id, sentence, vec, bert):
+    knowledge = vec["knowledge_vecs"][conv_id]
+    fact, sim = get_max_cosine_similarity_infersent(clean(sentence), knowledge, bert, knowledge_policy="bert")
+    if sim > 0.35:
+        knowledge_sentence = fact
+    else:
+        knowledge_sentence = ""
+    return knowledge_sentence
 
 def load_infersent_vecs(knowledge_index_path):
     splits = ['train', 'valid_freq', 'test_freq', 'test_rare', 'valid_rare']

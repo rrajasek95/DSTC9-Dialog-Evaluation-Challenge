@@ -416,7 +416,7 @@ def train():
                         help="Nucleus filtering (top-p) before sampling (<=0.0: no filtering)")
     parser.add_argument("--no_sample", action='store_true', help="Set to use greedy decoding instead of sampling")
     parser.add_argument("--max_length", type=int, default=20, help="Maximum length of the output utterances")
-    parser.add_argument("--knowledge_policy", type=str, default="infersent", choices=["tf_idf", "embeddings", "infersent"])
+    parser.add_argument("--knowledge_policy", type=str, default="infersent", choices=["tf_idf", "embeddings", "infersent", "bert"])
     args = parser.parse_args()
 
     # logging is set to INFO (resp. WARN) for main (resp. auxiliary) process. logger.info => log main process only, logger.warning => log all processes
