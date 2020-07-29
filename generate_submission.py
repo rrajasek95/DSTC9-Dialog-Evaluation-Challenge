@@ -60,31 +60,29 @@ def decode_sequences(input_ids, token_type_ids, model, tokenizer, args):
             expanded_tok_type_ids.append(expanded_tok_type_ids[-1])
         expanded_tok_type_ids = torch.tensor(expanded_tok_type_ids).to(args.device)
 
-        while len(current_output) == 0 and attempts < OUTPUT_PATIENCE:
-            for j in range(args.max_length):
-                prefix_input_seq = torch.tensor(tokenizer.encode(context) + current_output).unsqueeze(0)
-                truncated_tok_type_ids = expanded_tok_type_ids[:prefix_input_seq.shape[-1]].unsqueeze(0)
-                logits = model(prefix_input_seq.to(args.device), token_type_ids=truncated_tok_type_ids.to(args.device))
+        for j in range(args.max_length):
+            prefix_input_seq = torch.tensor(tokenizer.encode(context) + current_output).unsqueeze(0)
+            truncated_tok_type_ids = expanded_tok_type_ids[:prefix_input_seq.shape[-1]].unsqueeze(0)
+            logits = model(prefix_input_seq.to(args.device), token_type_ids=truncated_tok_type_ids.to(args.device))
 
-                if isinstance(logits, tuple) or len(logits.shape) == 4:  # for gpt2 and maybe others
-                    logits = logits[0]
-                logits = logits[0, -1, :] / args.temperature
-                logits = top_filtering(logits, top_k=args.top_k, top_p=args.top_p)
-                probs = F.softmax(logits, dim=-1)
+            if isinstance(logits, tuple) or len(logits.shape) == 4:  # for gpt2 and maybe others
+                logits = logits[0]
+            logits = logits[0, -1, :] / args.temperature
+            logits = top_filtering(logits, top_k=args.top_k, top_p=args.top_p)
+            probs = F.softmax(logits, dim=-1)
 
-                prev = torch.topk(probs, 1)[1] if args.no_sample else torch.multinomial(probs, 1)
-                if prev.item() in special_tokens_ids:
-                    while prev.item() in special_tokens_ids:
-                        if probs.max().item() == 1:
-                            # Disabled this rather noisy warning
-                            # logger.warn("Warning: model generating special token with probability 1.")
-                            break  # avoid infinitely looping over special token
-                        prev = torch.multinomial(probs, num_samples=1)
-                if prev.item() in special_tokens_ids:
-                    break
-                current_output.append(prev.item())
+            prev = torch.topk(probs, 1)[1] if args.no_sample else torch.multinomial(probs, 1)
+            if prev.item() in special_tokens_ids:
+                while prev.item() in special_tokens_ids:
+                    if probs.max().item() == 1:
+                        # Disabled this rather noisy warning
+                        # logger.warn("Warning: model generating special token with probability 1.")
+                        break  # avoid infinitely looping over special token
+                    prev = torch.multinomial(probs, num_samples=1)
+            if prev.item() in special_tokens_ids:
+                break
+            current_output.append(prev.item())
 
-            attempts += 1
 
         output = tokenizer.decode(current_output)
         outputs.append(output.replace('\n', '') + '\n')
