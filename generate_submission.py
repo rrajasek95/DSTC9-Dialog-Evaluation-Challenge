@@ -87,7 +87,7 @@ def decode_sequences(input_ids, token_type_ids, model, tokenizer, args):
             attempts += 1
 
         output = tokenizer.decode(current_output)
-        outputs.append(output + '\n')
+        outputs.append(output.replace('\n', '') + '\n')
     return outputs
 
 def pad_dataset(dataset, padding=0):
