@@ -332,29 +332,164 @@ class KnowledgeIndependentSWBDPolicy(DialogPolicy):
             NO_DIALOGUE_ACT: True
         }
 
+    def _normalized_weight(self, weights):
+        return [each / sum(weights) for each in weights]
+
     def _get_action_space(self, dialog_state):
+        if dialog_state['inter_turn']:
+            return self._get_action_space_inter_turn(dialog_state)
+        else:
+            return self._get_action_space_intra_turn(dialog_state)
+
+    def _get_action_space_inter_turn(self, dialog_state):
         da_history = dialog_state["da_history"]
 
         if len(da_history) == 0:
             acts = [[CONVENTIONAL_OPENING, STATEMENT_NON_OPINION], [CONVENTIONAL_OPENING, OPEN_QUESTION]]
             weights = [0.5, 0.5]
         else:
-            weights = [1.0]
-            if da_history[-1] == CONVENTIONAL_OPENING:
-                acts = [[CONVENTIONAL_OPENING, STATEMENT_OPINION]]
+            acts = []
+            weights = []
+            if da_history[-1] == ACKNOWLEDGE:
+                acts = [[STATEMENT_OPINION, STATEMENT_NON_OPINION], [YES_NO_QUESTION, OPEN_QUESTION]]
+                weights = self._normalized_weight([8.9, 1.3])
+            elif da_history[-1] == ACTION_DIRECTIVE:
+                acts = [[STATEMENT_NON_OPINION, STATEMENT_OPINION], [YES_NO_QUESTION, STATEMENT_NON_OPINION]]
+                weights = self._normalized_weight([12.4, 1.8])
+            elif da_history[-1] == AFFIRMATIVE_NON_YES_ANSWERS:
+                acts = [[STATEMENT_NON_OPINION, STATEMENT_OPINION], [STATEMENT_OPINION, WH_QUESTION]]
+                weights = self._normalized_weight([12.5, 12.5])
+            elif da_history[-1] == AGREE_ACCEPT:
+                acts = [[YES_NO_QUESTION, STATEMENT_OPINION], [STATEMENT_OPINION, STATEMENT_NON_OPINION]]
+                weights = self._normalized_weight([3.5, 17.6])
+            elif da_history[-1] == APOLOGY:
+                acts = [[STATEMENT_NON_OPINION, STATEMENT_OPINION], [ACKNOWLEDGE, STATEMENT_OPINION]]
+                weights = self._normalized_weight(([0.1, 0.1]))
+            elif da_history[-1] == BACKCHANNEL_IN_QUESTION_FORM:
+                acts = [[STATEMENT_OPINION, STATEMENT_NON_OPINION], [STATEMENT_OPINION, WH_QUESTION]]
+                weights = self._normalized_weight([16.7, 16.7])
             elif da_history[-1] == CONVENTIONAL_CLOSING:
-                acts = [[CONVENTIONAL_CLOSING, STATEMENT_OPINION]]
-            elif da_history[-1] == THANKING:
-                acts = [[STATEMENT_OPINION, CONVENTIONAL_CLOSING]]
+                acts = [[CONVENTIONAL_CLOSING, STATEMENT_OPINION], [STATEMENT_NON_OPINION, CONVENTIONAL_CLOSING]]
+                weights = self._normalized_weight([1.5, 8.3])
+            elif da_history[-1] == CONVENTIONAL_OPENING:
+                acts = [[CONVENTIONAL_OPENING, YES_NO_QUESTION], [CONVENTIONAL_OPENING, OPEN_QUESTION]]
+                weights = self._normalized_weight([4.2, 4.2])
+            elif da_history[-1] == DECLARATIVE_YES_NO_QUESTION:
+                acts = [[STATEMENT_OPINION, STATEMENT_NON_OPINION], [YES_NO_QUESTION, STATEMENT_OPINION]]
+                weights = self._normalized_weight([15.9, 1.6])
             elif da_history[-1] == HEDGE:
-                acts = [[STATEMENT_OPINION, YES_NO_QUESTION]]
-            elif da_history[-1] == OTHER_ANSWERS:
-                acts = [[STATEMENT_NON_OPINION, YES_NO_QUESTION]]
-            elif da_history[-1] == RHETORICAL_QUESTIONS:
-                acts = [[STATEMENT_OPINION, YES_NO_QUESTION]]
-            else:
-                acts = [[STATEMENT_NON_OPINION, STATEMENT_OPINION]]
+                acts = [[YES_NO_QUESTION, STATEMENT_NON_OPINION], [STATEMENT_OPINION, STATEMENT_NON_OPINION]]
+                weights = self._normalized_weight([12.5, 12.5])
+            elif da_history[-1] == NEGATIVE_NON_NO_ANSWERS:
+                acts = [[STATEMENT_NON_OPINION, STATEMENT_OPINION], [STATEMENT_OPINION, STATEMENT_OPINION]]
+                weights = self._normalized_weight([23.1, 11.5])
+            elif da_history[-1] == NO_ANSWERS:
+                acts = [[STATEMENT_OPINION, STATEMENT_NON_OPINION], [STATEMENT_OPINION, STATEMENT_OPINION]]
+                weights = self._normalized_weight([15.4, 7.7])
+            elif da_history[-1] == OPEN_QUESTION:
+                acts = [[STATEMENT_OPINION, STATEMENT_NON_OPINION], [STATEMENT_OPINION, STATEMENT_OPINION]]
+                weights = self._normalized_weight([15.3, 16.8])
+            elif da_history[-1] == OR_CLAUSE:
+                acts = [[STATEMENT_NON_OPINION, STATEMENT_OPINION], [STATEMENT_OPINION, YES_NO_QUESTION]]
+                weights = self._normalized_weight([23.1, 15.4])
+            elif da_history[-1] == REJECT:
+                acts = [[STATEMENT_OPINION, STATEMENT_NON_OPINION], [STATEMENT_OPINION, STATEMENT_OPINION]]
+                weights = self._normalized_weight([14.3, 14.3])
+            elif da_history[-1] == SIGNAL_NON_UNDERSTANDING:
+                acts = [[STATEMENT_NON_OPINION, STATEMENT_OPINION], [STATEMENT_OPINION, STATEMENT_OPINION]]
+                weights = self._normalized_weight([12, 21])
+            elif da_history[-1] == STATEMENT_NON_OPINION:
+                acts = [[YES_NO_QUESTION, STATEMENT_OPINION], [OPEN_QUESTION, STATEMENT_NON_OPINION]]
+                weights = self._normalized_weight([1.6, 3.2])
+            elif da_history[-1] == STATEMENT_OPINION:
+                acts = [[STATEMENT_OPINION, YES_NO_QUESTION], [STATEMENT_NON_OPINION, YES_NO_QUESTION]]
+                weights = self._normalized_weight([6.5, 2.8])
+            elif da_history[-1] == THANKING:
+                acts = [[STATEMENT_OPINION, CONVENTIONAL_CLOSING], [STATEMENT_OPINION, STATEMENT_NON_OPINION]]
+                weights = self._normalized_weight([6.9, 15.3])
+            elif da_history[-1] == WH_QUESTION:
+                acts = [[STATEMENT_OPINION, YES_NO_QUESTION], [STATEMENT_OPINION, STATEMENT_NON_OPINION]]
+                weights = self._normalized_weight([5.3, 13.4])
+            elif da_history[-1] == YES_ANSWERS:
+                acts = [[STATEMENT_OPINION, STATEMENT_NON_OPINION], [STATEMENT_OPINION, OPEN_QUESTION]]
+                weights = self._normalized_weight([13.3, 13.3])
+            elif da_history[-1] == YES_NO_QUESTION:
+                acts = [[YES_ANSWERS, STATEMENT_OPINION], [NO_ANSWERS, STATEMENT_OPINION]]
+                weights = self._normalized_weight([0.5, 0.5])
+        return acts, weights
 
+    def _get_action_space_intra_turn(self, dialog_state):
+        da_history = dialog_state["da_history"]
+
+        if len(da_history) == 0:
+            acts = [[CONVENTIONAL_OPENING, STATEMENT_NON_OPINION], [CONVENTIONAL_OPENING, OPEN_QUESTION]]
+            weights = [0.5, 0.5]
+        else:
+            acts = []
+            weights = []
+            if da_history[-1] == ACKNOWLEDGE:
+                acts = [[STATEMENT_OPINION, STATEMENT_NON_OPINION], [STATEMENT_NON_OPINION, YES_NO_QUESTION]]
+                weights = self._normalized_weight([13.3, 8.3])
+            elif da_history[-1] == ACTION_DIRECTIVE:
+                acts = [[STATEMENT_NON_OPINION, STATEMENT_OPINION], [STATEMENT_NON_OPINION, YES_NO_QUESTION]]
+                weights = self._normalized_weight([12.4, 7.9])
+            elif da_history[-1] == AFFIRMATIVE_NON_YES_ANSWERS:
+                acts = [[STATEMENT_NON_OPINION, STATEMENT_OPINION], [STATEMENT_OPINION, YES_NO_QUESTION]]
+                weights = self._normalized_weight([8.5, 6.8])
+            elif da_history[-1] == AGREE_ACCEPT:
+                acts = [[YES_NO_QUESTION, STATEMENT_OPINION], [STATEMENT_NON_OPINION, STATEMENT_OPINION]]
+                weights = self._normalized_weight([4.7, 17.7])
+            elif da_history[-1] == APOLOGY:
+                acts = [[STATEMENT_NON_OPINION, STATEMENT_OPINION], [STATEMENT_OPINION, YES_NO_QUESTION]]
+                weights = self._normalized_weight(([11.1, 13.6]))
+            elif da_history[-1] == APPRECIATION:
+                acts = [[STATEMENT_OPINION, YES_NO_QUESTION], [STATEMENT_NON_OPINION, STATEMENT_NON_OPINION]]
+                weights = self._normalized_weight([5.9, 18.8])
+            elif da_history[-1] == BACKCHANNEL_IN_QUESTION_FORM:
+                acts = [[STATEMENT_OPINION, STATEMENT_NON_OPINION], [STATEMENT_NON_OPINION, YES_NO_QUESTION]]
+                weights = self._normalized_weight([11.3, 8.7])
+            elif da_history[-1] == CONVENTIONAL_CLOSING:
+                acts = [[YES_NO_QUESTION, STATEMENT_NON_OPINION], [STATEMENT_NON_OPINION, STATEMENT_OPINION]]
+                weights = self._normalized_weight([3.3, 11.5])
+            elif da_history[-1] == CONVENTIONAL_OPENING:
+                acts = [[YES_NO_QUESTION, STATEMENT_NON_OPINION], [STATEMENT_OPINION, STATEMENT_OPINION]]
+                weights = self._normalized_weight([4.9, 12.2])
+            elif da_history[-1] == DECLARATIVE_YES_NO_QUESTION:
+                acts = [[STATEMENT_OPINION, STATEMENT_NON_OPINION], [STATEMENT_OPINION, YES_NO_QUESTION]]
+                weights = self._normalized_weight([12.2, 4.7])
+            elif da_history[-1] == HEDGE:
+                acts = [[STATEMENT_NON_OPINION, STATEMENT_NON_OPINION], [STATEMENT_NON_OPINION, OPEN_QUESTION]]
+                weights = self._normalized_weight([20.6, 1.5])
+            elif da_history[-1] == NEGATIVE_NON_NO_ANSWERS:
+                acts = [[STATEMENT_NON_OPINION, STATEMENT_OPINION], [STATEMENT_OPINION, YES_NO_QUESTION]]
+                weights = self._normalized_weight([20.7, 8.1])
+            elif da_history[-1] == NO_ANSWERS:
+                acts = [[STATEMENT_OPINION, STATEMENT_NON_OPINION], [STATEMENT_OPINION, YES_NO_QUESTION]]
+                weights = self._normalized_weight([13.2, 7.7])
+            elif da_history[-1] == OPEN_QUESTION:
+                acts = [[STATEMENT_OPINION, STATEMENT_NON_OPINION], [YES_NO_QUESTION, STATEMENT_NON_OPINION]]
+                weights = self._normalized_weight([22.6, 5.6])
+            elif da_history[-1] == OR_CLAUSE:
+                acts = [[STATEMENT_NON_OPINION, STATEMENT_OPINION], [STATEMENT_NON_OPINION, YES_NO_QUESTION]]
+                weights = self._normalized_weight([20, 10])
+            elif da_history[-1] == STATEMENT_NON_OPINION:
+                acts = [[STATEMENT_NON_OPINION, STATEMENT_NON_OPINION], [STATEMENT_OPINION, YES_NO_QUESTION]]
+                weights = self._normalized_weight([20.2, 6.3])
+            elif da_history[-1] == STATEMENT_OPINION:
+                acts = [[STATEMENT_NON_OPINION, STATEMENT_NON_OPINION], [STATEMENT_NON_OPINION, YES_NO_QUESTION]]
+                weights = self._normalized_weight([17.3, 5.6])
+            elif da_history[-1] == THANKING:
+                acts = [[STATEMENT_OPINION, CONVENTIONAL_CLOSING], [STATEMENT_OPINION, YES_NO_QUESTION]]
+                weights = self._normalized_weight([1.9, 6.5])
+            elif da_history[-1] == WH_QUESTION:
+                acts = [[STATEMENT_OPINION, YES_NO_QUESTION], [STATEMENT_OPINION, STATEMENT_NON_OPINION]]
+                weights = self._normalized_weight([3.7, 11.6])
+            elif da_history[-1] == YES_ANSWERS:
+                acts = [[STATEMENT_OPINION, STATEMENT_NON_OPINION], [STATEMENT_OPINION, YES_NO_QUESTION]]
+                weights = self._normalized_weight([6.1, 8.3])
+            elif da_history[-1] == YES_NO_QUESTION:
+                acts = [[STATEMENT_OPINION, STATEMENT_NON_OPINION], [STATEMENT_OPINION, YES_NO_QUESTION]]
+                weights = self._normalized_weight([14.2, 4.5])
         return acts, weights
 
     def _includes_knowledge(self, act):
@@ -365,8 +500,8 @@ if __name__ == '__main__':
     dialog_state = {
         "knowledge": "Blah",
         "da_history": [CONVENTIONAL_CLOSING],
-        "knowledge_history": [""]
+        "knowledge_history": [""],
+        "inter_turn": True
     }
     kd_policy = KnowledgeIndependentSWBDPolicy()
-
     print(kd_policy.get_knowledge_grounded_action(dialog_state))
