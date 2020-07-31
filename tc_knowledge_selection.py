@@ -10,8 +10,10 @@ import torch
 from nltk import word_tokenize
 
 from encoder.fb_models import InferSent
-from glove.glove_utils import get_max_cosine_similarity_infersent, get_cosine_similarity_infersent_all
+from glove.glove_utils import get_cosine_similarity_embs_all
 from knowledge_index import extract_fact_set, clean
+from sentence_transformers import SentenceTransformer
+
 
 
 def generate_knowledge_selections(test_freq_conversations, test_freq_reading_set, vectorizer):
@@ -111,7 +113,7 @@ def generate_knowledge_infersent(test_freq_conversations, test_freq_reading_set,
             available_knowledge = vectorizer[conv_id]
 
 
-            fact_sims = get_cosine_similarity_infersent_all(clean(text), available_knowledge, infersent)
+            fact_sims = get_cosine_similarity_embs_all(clean(text), available_knowledge, infersent)
             fact_sims.sort(key=lambda x: x[1], reverse=True)
             if i > 0:
                 same_as_prev_knowledge = fact_sims[0][0] == turn_knowledge[-1]["knowledge_1"]
@@ -149,13 +151,58 @@ def generate_knowledge_infersent(test_freq_conversations, test_freq_reading_set,
         'test_freq_infersent_group_3_articles.csv'
     ))
 
+def generate_knowledge_bert(test_freq_conversations, test_freq_reading_set, vectorizer):
+    model = SentenceTransformer('bert-base-nli-stsb-mean-tokens')
+    turn_knowledge = []
 
+    for conv_id, conv_data in test_freq_conversations.items():
+        for i, turn in enumerate(conv_data["content"]):
+            text = turn["message"]
+            available_knowledge = vectorizer[conv_id]
+
+            fact_sims = get_cosine_similarity_embs_all(clean(text), available_knowledge, model, knowledge_policy="bert")
+            fact_sims.sort(key=lambda x: x[1], reverse=True)
+            if i > 0:
+                same_as_prev_knowledge = fact_sims[0][0] == turn_knowledge[-1]["knowledge_1"]
+            else:
+                same_as_prev_knowledge = False
+            data = {
+                "conversation_id": conv_id,
+                "turn": (i + 1),
+                "text": text,
+                "knowledge_1": fact_sims[0][0],
+                "knowledge_1_similarity": fact_sims[0][1],
+                "knowledge_2": fact_sims[1][0],
+                "knowledge_2_similarity": fact_sims[1][1],
+                "knowledge_3": fact_sims[2][0],
+                "knowledge_3_similarity": fact_sims[2][1],
+                "same_as_prev_knowledge": same_as_prev_knowledge
+            }
+            turn_knowledge.append(data)
+    test_freq_knowledge_dataframe = pd.DataFrame(turn_knowledge,
+                                                 columns=[
+                                                     'conversation_id',
+                                                     'turn',
+                                                     'text',
+                                                     'knowledge_1',
+                                                     'knowledge_1_similarity',
+                                                     'knowledge_2',
+                                                     'knowledge_2_similarity',
+                                                     'knowledge_3',
+                                                     'knowledge_3_similarity',
+                                                     'same_as_prev_knowledge'
+                                                 ])
+
+    test_freq_knowledge_dataframe.to_csv(os.path.join(
+        'tc_processed',
+        'test_freq_bert_split_3.csv'
+    ))
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--knowledge_selection_policy", type=str, default="infersent", choices=["tf_idf", "infersent"])
+    parser.add_argument("--knowledge_selection_policy", type=str, default="bert", choices=["tf_idf", "infersent", "bert"])
     args = parser.parse_args()
     topical_chats_path = 'alexa-prize-topical-chat-dataset'
     test_freq_reading_set_path = os.path.join(
@@ -178,7 +225,19 @@ if __name__ == '__main__':
         with open(knowledge_index_path, 'rb') as knowledge_index_file:
             index_dict = pickle.load(knowledge_index_file)
             vectorizer = index_dict["knowledge_vecs"]
+    if args.knowledge_selection_policy == "bert":
+        test_freq_conv_file = os.path.join(
+            "Topical_Chats",
+            'test_freq.json'
+        )
+        knowledge_index_path = os.path.join(
+            'tc_processed',
+            'tc_knowledge_index_bert_test_freq_split_3.pkl'
+        )
 
+        with open(knowledge_index_path, 'rb') as knowledge_index_file:
+            index_dict = pickle.load(knowledge_index_file)
+            vectorizer = index_dict["knowledge_vecs"]
     else:
         test_freq_conv_file = os.path.join(
             topical_chats_path,
@@ -202,5 +261,7 @@ if __name__ == '__main__':
         test_freq_reading_set = json.load(test_freq_reading_set_file)
     if args.knowledge_selection_policy == "tf_idf":
         generate_knowledge_selections(test_freq_conversations, test_freq_reading_set, vectorizer)
-    else:
+    elif args.knowledge_selection_policy == "infersent":
         generate_knowledge_infersent(test_freq_conversations, test_freq_reading_set, vectorizer)
+    else:
+        generate_knowledge_bert(test_freq_conversations, test_freq_reading_set, vectorizer)

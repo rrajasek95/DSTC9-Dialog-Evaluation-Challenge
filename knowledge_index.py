@@ -13,8 +13,8 @@ import pickle
 from nltk import word_tokenize
 from nltk import sent_tokenize
 import torch
-import nltk
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sentence_transformers import SentenceTransformer
 
 
 def load_split_conversation_data(data_file_path, split):
@@ -77,7 +77,7 @@ def load_split_reading_set(data_file_path, split):
     return split_reading_set
 
 
-def build_fb_embs_set(reading_set, infersent, knowledge_convo_embs):
+def build_sent_model_embs_set(reading_set, model, knowledge_convo_embs, knowledge_policy="facebook"):
 
     convo_sets = []
     all_knowledge_sents = []
@@ -96,7 +96,8 @@ def build_fb_embs_set(reading_set, infersent, knowledge_convo_embs):
                 sentence = article_data[idx]
                 if len(word_tokenize(sentence)) < 5:
                     continue
-                knowledge_sents.append(clean(sentence))
+                for sent in sent_tokenize(sentence):
+                    knowledge_sents.append(clean(sent))
 
         knowledge_set = set()
         for sent in knowledge_sents:
@@ -106,7 +107,10 @@ def build_fb_embs_set(reading_set, infersent, knowledge_convo_embs):
         sents = list(knowledge_set)
         all_knowledge_sents += sents
 
-    embeddings = infersent.encode(all_knowledge_sents, tokenize=True)
+    if knowledge_policy == "facebook":
+        embeddings = model.encode(all_knowledge_sents, tokenize=True)
+    else:
+        embeddings = model.encode(all_knowledge_sents)
     for i in range(len(all_knowledge_sents)):
         convo_id = convo_sets[i]
         if convo_id not in knowledge_convo_embs:
@@ -114,6 +118,52 @@ def build_fb_embs_set(reading_set, infersent, knowledge_convo_embs):
         knowledge_convo_embs[convo_id].append([all_knowledge_sents[i], embeddings[i]])
     return knowledge_convo_embs
 
+
+def build_sent_model_embs_set_split_arts(reading_set, model, knowledge_convo_embs, knowledge_policy="facebook"):
+
+    convo_sets = []
+    all_knowledge_sents = []
+    for conv_id, data in reading_set.items():
+        knowledge_sents = []
+        knowledge_sents += extract_fact_set(data["agent_1"])
+        knowledge_sents += extract_fact_set(data["agent_2"])
+
+        article_data = data["article"]
+
+        article_indices = ['AS1', 'AS2', 'AS3', 'AS4']
+
+        # Article information
+        if "AS1" in article_data:
+            for idx in article_indices:
+                sentence = article_data[idx]
+                if len(word_tokenize(sentence)) < 5:
+                    continue
+                sentences = sent_tokenize(sentence)
+                n = 3
+                # >> > l = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+                groups = [sentences[i:i + n] for i in range(0, len(sentences), n)]
+                for group in groups:
+                    for sent in group:
+                        knowledge_sents.append(clean(sent))
+
+        knowledge_set = set()
+        for sent in knowledge_sents:
+            if sent not in knowledge_set:
+                knowledge_set.add(sent)
+                convo_sets.append(conv_id)
+        sents = list(knowledge_set)
+        all_knowledge_sents += sents
+
+    if knowledge_policy == "facebook":
+        embeddings = model.encode(all_knowledge_sents, tokenize=True)
+    else:
+        embeddings = model.encode(all_knowledge_sents)
+    for i in range(len(all_knowledge_sents)):
+        convo_id = convo_sets[i]
+        if convo_id not in knowledge_convo_embs:
+            knowledge_convo_embs[convo_id] = []
+        knowledge_convo_embs[convo_id].append([all_knowledge_sents[i], embeddings[i]])
+    return knowledge_convo_embs
 
 def build_knowledge_set(reading_set, knowledge_convo_embs=None, embs=False, emb_matrix=None, tokenizer=None):
     knowledge_set = set()
@@ -237,9 +287,38 @@ def build_topical_chats_knowledge_index_facebook(args):
     for split in splits:
         reading_sets.update(load_split_reading_set(data_file_path, split))
 
-    knowledge_convo_embs = build_fb_embs_set(reading_sets, infersent, knowledge_convo_embs)
+    knowledge_convo_embs = build_sent_model_embs_set(reading_sets, infersent, knowledge_convo_embs, args.knowledge_policy)
 
     knowledge_index_path = os.path.join(args.data_dir, 'tc_processed', 'tc_knowledge_index_facebook.pkl')
+
+    with open(knowledge_index_path, 'wb') as knowledge_index_file:
+        pickle.dump({
+            "knowledge_vecs": knowledge_convo_embs
+        }, knowledge_index_file)
+
+def build_topical_chats_knowledge_index_bert(args):
+    data_file_path = os.path.join(
+        args.data_dir,
+        'alexa-prize-topical-chat-dataset',
+    )
+
+    splits = [
+        # 'train',
+        # 'valid_freq',
+        # 'valid_rare',
+        'test_freq',
+        # 'test_rare'
+    ]
+
+    model = SentenceTransformer('bert-base-nli-stsb-mean-tokens')
+    knowledge_convo_embs = {}
+    reading_sets = {}
+    for split in splits:
+        reading_sets.update(load_split_reading_set(data_file_path, split))
+
+    knowledge_convo_embs = build_sent_model_embs_set_split_arts(reading_sets, model, knowledge_convo_embs, args.knowledge_policy)
+
+    knowledge_index_path = os.path.join(args.data_dir, 'tc_processed', 'tc_knowledge_index_bert_test_freq_split_3.pkl')
 
     with open(knowledge_index_path, 'wb') as knowledge_index_file:
         pickle.dump({
@@ -365,10 +444,12 @@ if __name__ == '__main__':
     parser.add_argument('--data_dir', type=str, default='./',
                         help='Directory where the topical chats folder is present')
 
-    parser.add_argument('--knowledge_policy', type=str, default='facebook', choices=['glove', 'tf_idf', 'facebook'])
+    parser.add_argument('--knowledge_policy', type=str, default='bert', choices=['glove', 'tf_idf', 'facebook', 'bert'])
     args = parser.parse_args()
     if args.knowledge_policy == 'facebook':
         build_topical_chats_knowledge_index_facebook(args)
+    elif args.knowledge_policy == 'bert':
+        build_topical_chats_knowledge_index_bert(args)
     elif args.knowledge_policy == "glove":
         build_topical_chats_knowledge_index_glove(args)
         build_conversation_knowledge_embeddings(args, 'tc_processed/tc_knowledge_index_glove.pkl')

@@ -11,11 +11,16 @@ from tqdm import tqdm
 from glove.glove_utils import get_max_cosine_similarity, get_max_cosine_similarity_infersent
 from encoder.fb_models import InferSent
 from knowledge_index import clean
+from sentence_transformers import SentenceTransformer
+
 
 CONFIG_NAME = 'config.json'
 
 logger = logging.getLogger(__file__)
 
+
+def transform_da(da_str):
+    return " ".join([f"<{da}>" for da in da_str.split(" ")])
 
 def load_data(dataset_path, split, training_configuration):
     path_prefix = os.path.join(dataset_path, split)
@@ -24,11 +29,14 @@ def load_data(dataset_path, split, training_configuration):
     src = [l.strip().split("_eos")[:-1] for l in open(path_prefix + '.src').readlines()]
     tgt = [l.strip().replace("_go", "").replace("_eos", "") for l in open(path_prefix + '.tgt').readlines()]
     fct = [l.strip() for l in open(path_prefix + '.fct').readlines()]
-    if training_configuration != "baseline" and split in ["train", "valid_freq"]:
-        history_da = [l.strip().split("_eos")[:-1] for l in open(path_prefix + ".src.da").readlines()]
+    if training_configuration != "baseline":
+        history_da_file = path_prefix + (".src.da" if training_configuration == "kd-pd-nrg" else ".src.swbd3.da")
+        history_resp_file = path_prefix + (".tgt.da" if training_configuration == "kd-pd-nrg" else ".tgt.swbd3.da")
+
+        history_da = [list(map(transform_da, l.strip().split("_eos")[:-1])) for l in open(history_da_file).readlines()]
         history_knowledge = itertools.repeat(itertools.repeat(""))
         # history_knowledge = [l.strip().split("_eos")[:-1] for l in open(path_prefix + ".src.fct")]
-        resp_da = [l.strip() for l in open(path_prefix + '.tgt.da').readlines()]
+        resp_da = [transform_da(l.strip()) for l in open(history_resp_file).readlines()]
     else:
         history_da = itertools.repeat(itertools.repeat(None))
         history_knowledge = itertools.repeat(itertools.repeat(None))
@@ -109,7 +117,8 @@ def process_split(dataset_path, split, tokenizer, index, knowledge_policy):
         W2V_PATH = 'fastText/crawl-300d-2M.vec'
         infersent.set_w2v_path(W2V_PATH)
         infersent.build_vocab_k_words(K=100000)
-
+    elif knowledge_policy == "bert":
+        bert_model = SentenceTransformer('bert-base-nli-stsb-mean-tokens')
     vec, dialog_act = index
     path_prefix = os.path.join(dataset_path, split)
     reading_set_path = os.path.join(dataset_path, 'reading_sets', f'{split}.json')
@@ -184,6 +193,9 @@ def process_split(dataset_path, split, tokenizer, index, knowledge_policy):
                     elif knowledge_policy == "embeddings":
                         knowledge_sentence = emb_knowledge_selection(conv_id, sentence, vec)
                         break
+                    elif knowledge_policy == "bert":
+                        knowledge_sentence = bert_knowledge_selection(conv_id, sentence, vec, bert_model)
+                        break
                     else:
                         knowledge_sentence = infersent_knowledge_selection(conv_id, sentence, vec, infersent)
                         break
@@ -226,6 +238,15 @@ def infersent_knowledge_selection(conv_id, sentence, vec, infersent):
         knowledge_sentence = ""
     return knowledge_sentence
 
+
+def bert_knowledge_selection(conv_id, sentence, vec, bert):
+    knowledge = vec["knowledge_vecs"][conv_id]
+    fact, sim = get_max_cosine_similarity_infersent(clean(sentence), knowledge, bert, knowledge_policy="bert")
+    if sim > 0.35:
+        knowledge_sentence = fact
+    else:
+        knowledge_sentence = ""
+    return knowledge_sentence
 
 def load_infersent_vecs(knowledge_index_path):
     splits = ['train', 'valid_freq', 'test_freq', 'test_rare', 'valid_rare']

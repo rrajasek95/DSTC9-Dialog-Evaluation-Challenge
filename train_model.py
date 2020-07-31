@@ -59,6 +59,16 @@ logger = logging.getLogger(__file__)
 ADDITIONAL_TOKENS = ["_nofact"]
 SPECIAL_TOKENS = ["<bos>", "<eos>", "<speaker1>", "<speaker2>", "<pad>"]
 
+NEW_SWITCHBOARD_TOKENS = list(
+    {"spoken-artifact", "+", "spoken-artifact", "tag-question", "spoken-artifact", "statement-opinion", "agree",
+     "agree", "action-directive", "disagree", "disagree", "backchannel", "spoken-artifact", "appreciation",
+     "downplayer", "summarize-reformulate", "backchannel-in-question-form", "backchannel", "signal-non-understanding",
+     "apology", "conventional-closing", "backchannel", "conventional-opening", "thanking", "hedge",
+     "affirmative-non-yes-answer", "negative-non-no-answer", "no-answer", "hedge", "yes-answer",
+     "offers-options-commits", "rhetorical-question", "open-question", "or-clause", "wh-question", "wh-question",
+     "yes-no-question", "yes-no-question", "statement-non-opinion", "statement-opinion", "spoken-artifact",
+     "spoken-artifact", "spoken-artifact"})
+
 TRAINING_CONFIG_TOKENS = {
     "baseline": {
         "additional_tokens": ADDITIONAL_TOKENS,
@@ -74,7 +84,7 @@ TRAINING_CONFIG_TOKENS = {
     },
 
     "kd-pd-nrg-swbd": {
-        "additional_tokens": ADDITIONAL_TOKENS + [f"<{dact}>" for dact in [NO_DIALOGUE_ACT, APOLOGY,
+        "additional_tokens": ADDITIONAL_TOKENS + [f"<{dact}>" for dact in ([NO_DIALOGUE_ACT, APOLOGY,
                                                                            STATEMENT_NON_OPINION, STATEMENT_OPINION,
                                                                            YES_NO_QUESTION, APPRECIATION, WH_QUESTION,
                                                                            CONVENTIONAL_CLOSING, OPEN_QUESTION,
@@ -92,7 +102,7 @@ TRAINING_CONFIG_TOKENS = {
                                                                            COLLABORATIVE_COMPLETION, THIRD_PARTY_TALK,
                                                                            REPEAT_PHRASE, SELF_TALK, RESPONSE_ACKNOWLEDGE,
                                                                            QUOTATION, ABANDONED_OR_TURN_EXIT, DISPREFRRED_ANSWERS,
-                                                                           NO_ANSWERS]] + ["_fact"],
+                                                                           NO_ANSWERS] + NEW_SWITCHBOARD_TOKENS)] + ["_fact"],  # TODO: remap or define a new scheme
         "special_tokens": SPECIAL_TOKENS
     }
 
@@ -416,7 +426,7 @@ def train():
                         help="Nucleus filtering (top-p) before sampling (<=0.0: no filtering)")
     parser.add_argument("--no_sample", action='store_true', help="Set to use greedy decoding instead of sampling")
     parser.add_argument("--max_length", type=int, default=20, help="Maximum length of the output utterances")
-    parser.add_argument("--knowledge_policy", type=str, default="infersent", choices=["tf_idf", "embeddings", "infersent"])
+    parser.add_argument("--knowledge_policy", type=str, default="infersent", choices=["tf_idf", "embeddings", "infersent", "bert"])
     args = parser.parse_args()
 
     # logging is set to INFO (resp. WARN) for main (resp. auxiliary) process. logger.info => log main process only, logger.warning => log all processes

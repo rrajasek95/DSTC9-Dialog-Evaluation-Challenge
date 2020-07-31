@@ -15,7 +15,7 @@ from collections import Counter
 import nlgeval
 import nlp
 import nltk
-from nltk import meteor
+from nltk.translate.meteor_score import meteor_score
 import numpy as np
 
 class ReferenceMetric(object):
@@ -115,7 +115,7 @@ class MeteorMetric(ReferenceMetric):
         except LookupError:
             nltk.download('wordnet')
 
-        return sum([meteor([ref], hyp) for (ref, hyp) in zip(hypotheses, references)]) / len(references)
+        return sum([meteor_score([ref], hyp) for (ref, hyp) in zip(hypotheses, references)]) / len(references)
 
     def __repr__(self):
         return f'METEOR score'
@@ -209,6 +209,12 @@ class USRMetric(ReferenceFreeMetric):
 
     def _compute_regression_scores(self, mlm_score, dr_c_scores, dr_f_scores):
         # Understandable (MLM), Natural (MLM), Maintains Context (DR-c), Interesting (DR-c), Uses Knowledge (DR-f)
+        common_len = min(len(mlm_score), len(dr_c_scores), len(dr_f_scores))
+
+        mlm_score = mlm_score[:common_len]
+        dr_c_scores = dr_c_scores[:common_len].tolist()
+        dr_f_scores = dr_f_scores[:common_len].tolist()
+
         X = np.array([mlm_score, mlm_score, dr_c_scores, dr_c_scores, dr_f_scores]).T
 
         with open('usr/examples/regr.pkl', 'rb') as regression_model_file:
