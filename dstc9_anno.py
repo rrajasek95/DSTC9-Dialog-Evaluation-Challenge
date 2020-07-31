@@ -78,7 +78,7 @@ def swbd_v3_tag_dstc9(tagger, data_path):
                 da_dicts = turn["swbd_da_v3"]
                 das = [da["label"] for da in da_dicts]
 
-                response_lines.append("_go" + " ".join(das) + " _eos\n")
+                response_lines.append("_go " + " ".join(das) + " _eos\n")
 
         with open(os.path.join(data_path, f'{split}.src.swbd3.da'), 'w') as da_file:
             da_file.writelines(lines)
