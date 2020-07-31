@@ -27,10 +27,13 @@ def load_data(dataset_path, split, training_configuration):
     tgt = [l.strip().replace("_go", "").replace("_eos", "") for l in open(path_prefix + '.tgt').readlines()]
     fct = [l.strip() for l in open(path_prefix + '.fct').readlines()]
     if training_configuration != "baseline":
-        history_da = [l.strip().split("_eos")[:-1] for l in open(path_prefix + ".src.da").readlines()]
+        history_da_file = path_prefix + (".src.da" if training_configuration == "kd-pd-nrg" else ".src.swbd3.da")
+        history_resp_file = path_prefix + (".tgt.da" if training_configuration == "kd-pd-nrg" else ".tgt.swbd3.da")
+
+        history_da = [l.strip().split("_eos")[:-1] for l in open(history_da_file).readlines()]
         history_knowledge = itertools.repeat(itertools.repeat(""))
         # history_knowledge = [l.strip().split("_eos")[:-1] for l in open(path_prefix + ".src.fct")]
-        resp_da = [l.strip() for l in open(path_prefix + '.tgt.da').readlines()]
+        resp_da = [l.strip() for l in open(history_resp_file).readlines()]
     else:
         history_da = itertools.repeat(itertools.repeat(None))
         history_knowledge = itertools.repeat(itertools.repeat(None))
