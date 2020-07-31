@@ -19,6 +19,9 @@ CONFIG_NAME = 'config.json'
 logger = logging.getLogger(__file__)
 
 
+def transform_da(da_str):
+    return " ".join([f"<{da}>" for da in da_str.split(" ")])
+
 def load_data(dataset_path, split, training_configuration):
     path_prefix = os.path.join(dataset_path, split)
 
@@ -30,10 +33,10 @@ def load_data(dataset_path, split, training_configuration):
         history_da_file = path_prefix + (".src.da" if training_configuration == "kd-pd-nrg" else ".src.swbd3.da")
         history_resp_file = path_prefix + (".tgt.da" if training_configuration == "kd-pd-nrg" else ".tgt.swbd3.da")
 
-        history_da = [l.strip().split("_eos")[:-1] for l in open(history_da_file).readlines()]
+        history_da = [list(map(transform_da, l.strip().split("_eos")[:-1])) for l in open(history_da_file).readlines()]
         history_knowledge = itertools.repeat(itertools.repeat(""))
         # history_knowledge = [l.strip().split("_eos")[:-1] for l in open(path_prefix + ".src.fct")]
-        resp_da = [l.strip() for l in open(history_resp_file).readlines()]
+        resp_da = [transform_da(l.strip()) for l in open(history_resp_file).readlines()]
     else:
         history_da = itertools.repeat(itertools.repeat(None))
         history_knowledge = itertools.repeat(itertools.repeat(None))
