@@ -59,6 +59,16 @@ logger = logging.getLogger(__file__)
 ADDITIONAL_TOKENS = ["_nofact"]
 SPECIAL_TOKENS = ["<bos>", "<eos>", "<speaker1>", "<speaker2>", "<pad>"]
 
+NEW_SWITCHBOARD_TOKENS = list(
+    {"spoken-artifact", "+", "spoken-artifact", "tag-question", "spoken-artifact", "statement-opinion", "agree",
+     "agree", "action-directive", "disagree", "disagree", "backchannel", "spoken-artifact", "appreciation",
+     "downplayer", "summarize-reformulate", "backchannel-in-question-form", "backchannel", "signal-non-understanding",
+     "apology", "conventional-closing", "backchannel", "conventional-opening", "thanking", "hedge",
+     "affirmative-non-yes-answer", "negative-non-no-answer", "no-answer", "hedge", "yes-answer",
+     "offers-options-commits", "rhetorical-question", "open-question", "or-clause", "wh-question", "wh-question",
+     "yes-no-question", "yes-no-question", "statement-non-opinion", "statement-opinion", "spoken-artifact",
+     "spoken-artifact", "spoken-artifact"})
+
 TRAINING_CONFIG_TOKENS = {
     "baseline": {
         "additional_tokens": ADDITIONAL_TOKENS,
@@ -92,7 +102,7 @@ TRAINING_CONFIG_TOKENS = {
                                                                            COLLABORATIVE_COMPLETION, THIRD_PARTY_TALK,
                                                                            REPEAT_PHRASE, SELF_TALK, RESPONSE_ACKNOWLEDGE,
                                                                            QUOTATION, ABANDONED_OR_TURN_EXIT, DISPREFRRED_ANSWERS,
-                                                                           NO_ANSWERS]] + ["_fact"],
+                                                                           NO_ANSWERS]] + ["_fact"] + NEW_SWITCHBOARD_TOKENS,  # TODO: remap or define a new scheme
         "special_tokens": SPECIAL_TOKENS
     }
 
