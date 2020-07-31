@@ -84,7 +84,7 @@ TRAINING_CONFIG_TOKENS = {
     },
 
     "kd-pd-nrg-swbd": {
-        "additional_tokens": ADDITIONAL_TOKENS + [f"<{dact}>" for dact in [NO_DIALOGUE_ACT, APOLOGY,
+        "additional_tokens": ADDITIONAL_TOKENS + [f"<{dact}>" for dact in ([NO_DIALOGUE_ACT, APOLOGY,
                                                                            STATEMENT_NON_OPINION, STATEMENT_OPINION,
                                                                            YES_NO_QUESTION, APPRECIATION, WH_QUESTION,
                                                                            CONVENTIONAL_CLOSING, OPEN_QUESTION,
@@ -102,7 +102,7 @@ TRAINING_CONFIG_TOKENS = {
                                                                            COLLABORATIVE_COMPLETION, THIRD_PARTY_TALK,
                                                                            REPEAT_PHRASE, SELF_TALK, RESPONSE_ACKNOWLEDGE,
                                                                            QUOTATION, ABANDONED_OR_TURN_EXIT, DISPREFRRED_ANSWERS,
-                                                                           NO_ANSWERS]] + ["_fact"] + NEW_SWITCHBOARD_TOKENS,  # TODO: remap or define a new scheme
+                                                                           NO_ANSWERS] + NEW_SWITCHBOARD_TOKENS)] + ["_fact"],  # TODO: remap or define a new scheme
         "special_tokens": SPECIAL_TOKENS
     }
 
