@@ -58,19 +58,24 @@ class TopicalChatsIndexRetriever:
         requests.put(url, data=mappings, headers=headers, timeout=timeout)
 
     def save_doc(self, data_dict):
-        fact = TopicalChatsFact(text=data_dict['text'],
-                                reddit_thread_id=data_dict['reddit_thread_id'],
-                                normalized_entity=data_dict['normalized_entity'])
+        fact = TopicalChatsFact(**data_dict)
         fact.save()
 
-    def add_documents(self, infilename):
-        with open(infilename, "r") as infile:
-            reader = csv.DictReader(infile)
+    def add_documents(self, data):
+        if isinstance(data, str):
+            with open(data, "r") as infile:
+                reader = csv.DictReader(infile)
 
-            for row in reader:
-                data_dict = {}
-                data_dict.update(row)
-                self.save_doc(data_dict)
+                for row in reader:
+                    data_dict = {}
+                    data_dict.update(row)
+                    self.save_doc(data_dict)
+        else:
+            for doc in data:
+                insert_doc = {}
+                if isinstance(doc, str):
+                    insert_doc["text"] = doc
+                self.save_doc(insert_doc)
 
     def query_facts_from_entities(self, entities):
         q = None
@@ -90,6 +95,15 @@ class TopicalChatsIndexRetriever:
         for hit in s:
             print(hit.text)
 
+    def retrieve_facts_matching_utterance(self, utterance):
+        q = Q("match", text=utterance)
+
+        s = TopicalChatsFact.search(using=self.alias).query(q)
+        response = s.execute()
+
+        hits = [hit.text for hit in s]
+
+        return hits
 
 
 if __name__ == '__main__':
@@ -102,5 +116,6 @@ if __name__ == '__main__':
 
     tc_retriever = TopicalChatsIndexRetriever(args.host, args.port, args.alias)
     tc_retriever.create_index()
-    tc_retriever.add_documents('v2_entity_funfacts_texts.csv')
-    tc_retriever.query_facts_from_entities(['t3_3nhy9j'])
+    # tc_retriever.add_documents('v2_entity_funfacts_texts.csv')
+    # tc_retriever.query_facts_from_entities(['t3_3nhy9j'])
+    tc_retriever.retrieve_facts_matching_utterance("jellyfish")

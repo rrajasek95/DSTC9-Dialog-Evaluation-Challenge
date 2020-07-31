@@ -5,7 +5,11 @@ import argparse
 import json
 import os
 import string
+
+from elasticsearch_dsl import Index
+
 import glove.glove_utils
+from elastic.topical_chats import TopicalChatsIndexRetriever
 from encoder.fb_models import InferSent
 from glove.glove_utils import get_sentence_glove_embedding
 import pickle
@@ -360,21 +364,7 @@ def build_conversation_knowledge_embeddings(args, glove_embs_path):
 
 
 def build_topical_chats_knowledge_index(args):
-    data_file_path = os.path.join(
-        args.data_dir,
-        'alexa-prize-topical-chat-dataset',
-    )
-
-    splits = ['train', 'valid_freq', 'valid_rare', 'test_freq', 'test_rare']
-
-    knowledge_set = set()
-
-    for split in splits:
-        split_reading_set = load_split_reading_set(data_file_path, split)
-
-        knowledge_set |= build_knowledge_set(split_reading_set)
-
-    corpus = sorted(list(knowledge_set), key=lambda x: len(x))
+    corpus = build_knowledge_corpus_from_reading_sets(args)
 
     vectorizer = TfidfVectorizer()
 
@@ -390,6 +380,21 @@ def build_topical_chats_knowledge_index(args):
             "knowledge": corpus,
             "knowledge_vecs": transformed_knowledge_sentences
         }, knowledge_index_file)
+
+
+def build_knowledge_corpus_from_reading_sets(args):
+    data_file_path = os.path.join(
+        args.data_dir,
+        'alexa-prize-topical-chat-dataset',
+    )
+    splits = ['train', 'valid_freq', 'valid_rare', 'test_freq', 'test_rare']
+    knowledge_set = set()
+    for split in splits:
+        split_reading_set = load_split_reading_set(data_file_path, split)
+
+        knowledge_set |= build_knowledge_set(split_reading_set)
+    corpus = sorted(list(knowledge_set), key=lambda x: len(x))
+    return corpus
 
 
 """
@@ -434,6 +439,18 @@ def build_tfidf_from_dstc9(args):
         pickle.dump(index_dict, index_file)
         print(f"Index has been built and saved to '{index_path}'")
 
+def build_elasticsearch_knowledge_index(args):
+    tc_retriever = TopicalChatsIndexRetriever("localhost", 9200, "default")
+    # i = Index('topical_chats')
+    # i.delete(using='default')
+    print("Purged existing index. Aggregating knowledge")
+    corpus = build_knowledge_corpus_from_reading_sets(args)
+
+    print("Corpus prepared! Adding docs to index.")
+    tc_retriever.create_index()
+    tc_retriever.add_documents(corpus)
+    print("Added docs to index!")
+    print(tc_retriever.retrieve_facts_matching_utterance("jellyfish"))
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -444,12 +461,14 @@ if __name__ == '__main__':
     parser.add_argument('--data_dir', type=str, default='./',
                         help='Directory where the topical chats folder is present')
 
-    parser.add_argument('--knowledge_policy', type=str, default='bert', choices=['glove', 'tf_idf', 'facebook', 'bert'])
+    parser.add_argument('--knowledge_policy', type=str, default='bert', choices=['glove', 'tf_idf', 'facebook', 'bert', 'elastic'])
     args = parser.parse_args()
     if args.knowledge_policy == 'facebook':
         build_topical_chats_knowledge_index_facebook(args)
     elif args.knowledge_policy == 'bert':
         build_topical_chats_knowledge_index_bert(args)
+    elif args.knowledge_policy == "elastic":
+        build_elasticsearch_knowledge_index(args)
     elif args.knowledge_policy == "glove":
         build_topical_chats_knowledge_index_glove(args)
         build_conversation_knowledge_embeddings(args, 'tc_processed/tc_knowledge_index_glove.pkl')
