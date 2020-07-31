@@ -10,6 +10,7 @@ def analyze_da_information_for_split(da_mapping):
 
     for da, segments in da_mapping.items():
         print("Label:", da)
+        print("Frequency", len(segments))
         print("Examples:")
         sample_segments = random.sample(segments, min(20, len(segments)))
 
@@ -59,7 +60,7 @@ def analyze_tc_data(args):
     splits = ['train' ] # , 'valid_freq', 'test_freq']
 
     for split in splits:
-        if args.ath :
+        if args.ath:
             split_file = f'{split}_anno_athena.json'
         else:
             split_file = f'{split}_full_anno.json'
