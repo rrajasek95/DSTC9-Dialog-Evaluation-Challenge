@@ -14,6 +14,7 @@ from tc_dataset import TopicalChatsDataset, TopicalChatsKDDataset
 from train_util.decode import top_filtering
 from utils import get_dataset, augmented_tc_dataset
 import torch.nn.functional as F
+import os
 
 """
 Code to generate the submissions for the DSTC9 Dialog Evaluation Track
@@ -169,6 +170,16 @@ def generate_submissions(args):
     tokenizer = tokenizer_class.from_pretrained(args.model_metadata_path)
 
     model_class = GPT2DoubleHeadsModel if "gpt2" in args.model_checkpoint else OpenAIGPTDoubleHeadsModel
+    outputs = []
+
+    cache_file = {}
+    completed_index = -1
+    if os.path.isfile(args.submission_cache_path):
+        logger.info("Load previous submission from cache at %s", args.submission_cache_path)
+        cache_file = torch.load(args.submission_cache_path)
+        outputs = cache_file["outputs"]
+        completed_index = cache_file["i"]
+    loader, sampler = get_loader(args, tokenizer)
 
     # This is not the proper way to load the model! This is a hack to be able to generate outputs from the
     # model I previously trained. This needs to be fixed in the original training script as well
@@ -179,11 +190,13 @@ def generate_submissions(args):
     # model = model_class.from_pretrained(args.model_checkpoint)
     model.to(args.device)
 
-    loader, sampler = get_loader(args, tokenizer)
 
-    outputs = []
+
     with torch.no_grad():
         for i, batch in tqdm(enumerate(loader)):
+            if completed_index >= 0:
+                completed_index -= 1
+                continue
             # # Added this to generate missing outputs for KD-PD-NRG
             # if i + 1 not in [1267, 1831, 2475, 2498, 4220,
             #                  4683, 7252, 7504, 9236, 9476,
@@ -196,6 +209,10 @@ def generate_submissions(args):
             outputs += decode_sequences(input_ids, token_type_ids, model, tokenizer, args)
 
             if i % args.log_every_n == 0:
+                logger.info("Saving outputs to cache at %s", args.submission_cache_path)
+                cache_file["outputs"] = outputs
+                cache_file["i"] = i
+                torch.save(cache_file, args.submission_cache_path)
                 input_seq = tokenizer.decode(input_ids[0][0])
                 prefix, suffix = input_seq.rsplit("<speaker", maxsplit=1)
                 context = prefix + "<speaker" + suffix[:2]  # Hacky way to append the speaker tag
@@ -216,7 +233,7 @@ if __name__ == '__main__':
     parser.add_argument('--training_configuration', type=str, default="baseline",
                         help="Training configuration to run",
                         choices=["baseline", "kd-pd-nrg", "kd-pd-nrg-swbd"])
-    parser.add_argument('--dataset_configuration', type=str, default="dstc9",
+    parser.add_argument('--dataset_configuration', type=str, default="topical-chats",
                         help="Configuration of dataset to load for training",
                         choices=["dstc9", "topical-chats"])
     parser.add_argument('--heuristic_policy', action='store_true',
@@ -232,7 +249,7 @@ if __name__ == '__main__':
     parser.add_argument('--model_metadata_path', type=str, default='runs/topical_chats_gpt2',
                         help='Path to the tokenizer and model configuration')
     parser.add_argument("--num_candidates", type=int, default=2, help="Number of candidates for training")
-    parser.add_argument('--dataset_cache', type=str, default='./dataset_cache', help='Path or url of the dataset cache')
+    parser.add_argument('--dataset_cache', type=str, default='./dataset_caches', help='Path or url of the dataset cache')
     parser.add_argument('--max_history', type=int, default=2, help='Number of previous exchanges to keep in history')
     parser.add_argument('--max_fact_length', type=int, default=200,
                         help='Number of fact tokens to include in the input')
@@ -243,6 +260,7 @@ if __name__ == '__main__':
     parser.add_argument("--local_rank", type=int, default=-1,
                         help="Local rank for distributed training (-1: not distributed)")
     parser.add_argument('--output_file_path', type=str, default='submissions/submissions.txt')
+    parser.add_argument('--submission_cache_path', type=str, default='./submission_cache')
     parser.add_argument('--log_every_n', type=int, default=20,
                         help="Log a sample of outputs after every n iterations")
     # Decoding arguments
