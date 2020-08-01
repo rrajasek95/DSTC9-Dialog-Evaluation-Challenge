@@ -171,17 +171,15 @@ def generate_submissions(args):
 
     model_class = GPT2DoubleHeadsModel if "gpt2" in args.model_checkpoint else OpenAIGPTDoubleHeadsModel
     outputs = []
+
     cache_file = {}
     completed_index = -1
-
     if os.path.isfile(args.submission_cache_path):
         logger.info("Load previous submission from cache at %s", args.submission_cache_path)
         cache_file = torch.load(args.submission_cache_path)
         outputs = cache_file["outputs"]
         completed_index = cache_file["i"]
     loader, sampler = get_loader(args, tokenizer)
-
-
 
     # This is not the proper way to load the model! This is a hack to be able to generate outputs from the
     # model I previously trained. This needs to be fixed in the original training script as well
@@ -211,7 +209,8 @@ def generate_submissions(args):
             outputs += decode_sequences(input_ids, token_type_ids, model, tokenizer, args)
 
             if i % args.log_every_n == 0:
-                cache_file["outputs"] += outputs
+                logger.info("Saving outputs to cache at %s", args.submission_cache_path)
+                cache_file["outputs"] = outputs
                 cache_file["i"] = i
                 torch.save(cache_file, args.submission_cache_path)
                 input_seq = tokenizer.decode(input_ids[0][0])
