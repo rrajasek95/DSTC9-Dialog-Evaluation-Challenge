@@ -147,8 +147,10 @@ def build_sent_model_embs_set_split_arts(reading_set, model, knowledge_convo_emb
                 # >> > l = [1, 2, 3, 4, 5, 6, 7, 8, 9]
                 groups = [sentences[i:i + n] for i in range(0, len(sentences), n)]
                 for group in groups:
-                    for sent in group:
-                        knowledge_sents.append(clean(sent))
+                    sent = ""
+                    for g in group:
+                        sent += g + " "
+                    knowledge_sents.append(clean(sent))
 
         knowledge_set = set()
         for sent in knowledge_sents:
