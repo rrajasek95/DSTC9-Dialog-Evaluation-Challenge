@@ -29,7 +29,7 @@ def analyze_split(split_data):
         for turn in turns:
             segments = turn['segments']
             mezza_das = turn['mezza_da']
-            swbd_das = turn['switchboard_da']
+            swbd_das = turn['swbd_da_v3']
 
             for (segment, mezza_da, swbd_da) in zip(segments, mezza_das, swbd_das):
                 mezza_da_segment_mapping[mezza_da['da']].append(segment)
@@ -63,7 +63,7 @@ def analyze_tc_data(args):
         if args.ath:
             split_file = f'{split}_anno_athena.json'
         else:
-            split_file = f'{split}_full_anno.json'
+            split_file = f'{split}_anno_v5.json'
         split_file_path = os.path.join(args.data_path, split_file)
 
         with open(split_file_path, 'r') as split_f:
