@@ -275,14 +275,9 @@ class USRMetric(ReferenceFreeMetric):
         return self._compute_dr_score(args)
 
     def __init__(self, context_file, fact_file, hypothesis_file):
-        lm_scoring_file = self._make_scoring_file(context_file, hypothesis_file)
-        dr_scoring_file = self._make_dr_scoring_file(context_file, fact_file, hypothesis_file)
-        mlm_scores = self.compute_mlm_scores(lm_scoring_file)
-        dr_c_scores = self._compute_dr_c_score(dr_scoring_file)
-        dr_f_scores = self._compute_dr_f_score(dr_scoring_file)
-        usr_scores = self._compute_regression_scores(mlm_scores, dr_c_scores, dr_f_scores)
+        self.lm_scoring_file = self._make_scoring_file(context_file, hypothesis_file)
+        self.dr_scoring_file = self._make_dr_scoring_file(context_file, fact_file, hypothesis_file)
 
-        self.results = usr_scores
 
     def compute_mlm_scores(self, scoring_file):
         args = self.build_args(scoring_file)
@@ -344,6 +339,13 @@ class USRMetric(ReferenceFreeMetric):
         return 'USR Metric Fine-tuned on Topical Chats'
 
     def compute(self, hypotheses):
+        mlm_scores = self.compute_mlm_scores(self.lm_scoring_file)
+        dr_c_scores = self._compute_dr_c_score(self.dr_scoring_file)
+        dr_f_scores = self._compute_dr_f_score(self.dr_scoring_file)
+        usr_scores = self._compute_regression_scores(mlm_scores, dr_c_scores, dr_f_scores)
+
+        self.results = usr_scores
+
         return sum(self.results) / len(self.results) if len(self.results) > 0 else 0
 
     def _make_dr_scoring_file(self, context_file, fact_file, hypothesis_file):
