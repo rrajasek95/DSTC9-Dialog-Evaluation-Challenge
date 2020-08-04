@@ -45,7 +45,7 @@ def analyze_knowledge_selection_data(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_file',
-                        default='test_freq_bert - test_freq_bert.csv',
+                        default='test_freq_bert_summarize_arts - test_freq_bert_summarize_arts.csv',
                         help='File that contains knowledge data to analyze')
 
     args = parser.parse_args()
