@@ -195,7 +195,7 @@ def generate_knowledge_bert(test_freq_conversations, test_freq_reading_set, vect
 
     test_freq_knowledge_dataframe.to_csv(os.path.join(
         'tc_processed',
-        'test_freq_bert_split_3.csv'
+        'test_freq_bert_summarize_arts.csv'
     ))
 
 
@@ -232,7 +232,7 @@ if __name__ == '__main__':
         )
         knowledge_index_path = os.path.join(
             'tc_processed',
-            'tc_knowledge_index_bert_test_freq_split_3.pkl'
+            'tc_knowledge_index_bert_test_freq_summarize.pkl'
         )
 
         with open(knowledge_index_path, 'rb') as knowledge_index_file:
