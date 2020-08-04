@@ -1,5 +1,9 @@
 import string
+from argparse import Namespace
+
 import numpy as np
+
+from elastic.topical_chats import TopicalChatsIndexRetriever
 from glove.glove_utils import get_max_cosine_similarity
 from elasticsearch import Elasticsearch
 from elasticsearch_dsl import Search
@@ -54,11 +58,8 @@ class ElasticRankerRetriever(object):
     Used to implement a more general knowledge retriever
     for querying elasticsearch for data
     """
-    def __init__(self, elastic_client: Elasticsearch):
-        self.client = elastic_client
+    def __init__(self, args: Namespace):
+        self.tc_retriever = TopicalChatsIndexRetriever(args.host, args.port, args.alias)
 
     def get_top_n(self, query, n=5):
-        s = Search(using=self.client,
-                   index="topical-knowledge")
-
-        response = s.execute()
+        return self.tc_retriever.retrieve_facts_matching_utterance(query)
