@@ -174,6 +174,14 @@ class TopicalChatsKDDataset(TopicalChatsDataset):
         das, knowledge = self.dialog_policy.get_knowledge_grounded_action(dialog_state)
         return das, self.tokenizer.encode(knowledge)
 
+    def _get_tags(self, index):
+        (history, (response, mezza_das, knowledge)) = self.dataset[index]
+        dialog_state = self._construct_dialog_state(history)
+        mezza_das, knowledge = self._execute_heuristic_policy(dialog_state)
+
+        mezza_das = [f"<{da}>" for da in mezza_das]
+        return mezza_das
+
     def __getitem__(self, index):
         (history, (response, mezza_das, knowledge)) = self.dataset[index]
 

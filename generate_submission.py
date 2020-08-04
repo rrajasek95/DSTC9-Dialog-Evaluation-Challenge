@@ -161,7 +161,7 @@ def get_loader(args, tokenizer):
                               collate_fn=lambda x: collate_batch_elements(x, tokenizer, args),
                               shuffle=False)
 
-    return loader, sampler
+    return loader, sampler, dataset
 
 def generate_submissions(args):
 
@@ -179,7 +179,7 @@ def generate_submissions(args):
         cache_file = torch.load(args.submission_cache_path)
         outputs = cache_file["outputs"]
         completed_index = cache_file["i"]
-    loader, sampler = get_loader(args, tokenizer)
+    loader, sampler, dataset = get_loader(args, tokenizer)
 
     # This is not the proper way to load the model! This is a hack to be able to generate outputs from the
     # model I previously trained. This needs to be fixed in the original training script as well
@@ -218,7 +218,13 @@ def generate_submissions(args):
                 context = prefix + "<speaker" + suffix[:2]  # Hacky way to append the speaker tag
                 logger.info(f"Context: {context}")
                 logger.info(f"Sample output: {outputs[i*args.valid_batch_size]}")  # Log first sentence of that batch
-
+    outputs_tags = []
+    for i in range(len(dataset)):
+        heuristic_tags = dataset._get_tags(i)
+        outputs_tags.append(outputs[i].replace("\n", "") + "".join(heuristic_tags) + "\n")
+    outputs_tags_file_path = args.output_file_path[-4] + "_tagged.txt"
+    with open(outputs_tags_file_path, 'w') as output_file:
+        output_file.writelines(outputs_tags)
     with open(args.output_file_path, 'w') as output_file:
         output_file.writelines(outputs)
 
