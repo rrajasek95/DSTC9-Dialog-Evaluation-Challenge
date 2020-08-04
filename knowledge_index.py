@@ -19,6 +19,7 @@ from nltk import sent_tokenize
 import torch
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sentence_transformers import SentenceTransformer
+from gensim.summarization.summarizer import summarize
 
 
 def load_split_conversation_data(data_file_path, split):
@@ -122,6 +123,54 @@ def build_sent_model_embs_set(reading_set, model, knowledge_convo_embs, knowledg
         knowledge_convo_embs[convo_id].append([all_knowledge_sents[i], embeddings[i]])
     return knowledge_convo_embs
 
+
+def build_sent_model_embs_set_summarize_arts(reading_set, model, knowledge_convo_embs, knowledge_policy="facebook"):
+
+    convo_sets = []
+    all_knowledge_sents = []
+    for conv_id, data in reading_set.items():
+        knowledge_sents = []
+        knowledge_sents += extract_fact_set(data["agent_1"])
+        knowledge_sents += extract_fact_set(data["agent_2"])
+
+        article_data = data["article"]
+
+        article_indices = ['AS1', 'AS2', 'AS3', 'AS4']
+
+        # Article information
+        if "AS1" in article_data:
+            sentences = []
+            for idx in article_indices:
+                sentence = article_data[idx]
+                if len(word_tokenize(sentence)) < 5:
+                    continue
+                sentences.append(sentence)
+            long_sentence = ""
+            for sent in sentences:
+                long_sentence += sent
+            text = summarize(long_sentence, ratio=0.5)
+            for sent in sent_tokenize(text):
+                knowledge_sents.append(clean(sent))
+
+
+        knowledge_set = set()
+        for sent in knowledge_sents:
+            if sent not in knowledge_set:
+                knowledge_set.add(sent)
+                convo_sets.append(conv_id)
+        sents = list(knowledge_set)
+        all_knowledge_sents += sents
+
+    if knowledge_policy == "facebook":
+        embeddings = model.encode(all_knowledge_sents, tokenize=True)
+    else:
+        embeddings = model.encode(all_knowledge_sents)
+    for i in range(len(all_knowledge_sents)):
+        convo_id = convo_sets[i]
+        if convo_id not in knowledge_convo_embs:
+            knowledge_convo_embs[convo_id] = []
+        knowledge_convo_embs[convo_id].append([all_knowledge_sents[i], embeddings[i]])
+    return knowledge_convo_embs
 
 def build_sent_model_embs_set_split_arts(reading_set, model, knowledge_convo_embs, knowledge_policy="facebook"):
 
@@ -322,9 +371,9 @@ def build_topical_chats_knowledge_index_bert(args):
     for split in splits:
         reading_sets.update(load_split_reading_set(data_file_path, split))
 
-    knowledge_convo_embs = build_sent_model_embs_set_split_arts(reading_sets, model, knowledge_convo_embs, args.knowledge_policy)
+    knowledge_convo_embs = build_sent_model_embs_set_summarize_arts(reading_sets, model, knowledge_convo_embs, args.knowledge_policy)
 
-    knowledge_index_path = os.path.join(args.data_dir, 'tc_processed', 'tc_knowledge_index_bert_test_freq_split_3.pkl')
+    knowledge_index_path = os.path.join(args.data_dir, 'tc_processed', 'tc_knowledge_index_bert_test_freq_summarize.pkl')
 
     with open(knowledge_index_path, 'wb') as knowledge_index_file:
         pickle.dump({
