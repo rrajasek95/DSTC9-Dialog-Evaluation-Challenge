@@ -58,8 +58,8 @@ class ElasticRankerRetriever(object):
     Used to implement a more general knowledge retriever
     for querying elasticsearch for data
     """
-    def __init__(self, args: Namespace):
-        self.tc_retriever = TopicalChatsIndexRetriever(args.host, args.port, args.alias)
+    def __init__(self, host, port, alias):
+        self.tc_retriever = TopicalChatsIndexRetriever(host, port, alias)
 
     def get_top_n(self, query, n=5):
-        return self.tc_retriever.retrieve_facts_matching_utterance(query)
+        return self.tc_retriever.retrieve_facts_with_score(query)
