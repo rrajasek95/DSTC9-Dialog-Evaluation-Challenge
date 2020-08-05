@@ -39,7 +39,7 @@ ATTR_TO_SPECIAL_TOKEN = {
     'additional_special_tokens': ["<speaker1>", "<speaker2>"]
 }
 
-MODEL_INPUTS = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "token_type_ids"]
+MODEL_INPUTS = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "token_type_ids", "das_to_return"]
 PADDED_INPUTS = ["input_ids", "lm_labels", "token_type_ids"]
 OUTPUT_PATIENCE = 5
 
@@ -93,7 +93,7 @@ def pad_dataset(dataset, padding=0):
     """ Pad the dataset. This could be optimized by defining a Dataset class and padding at the batch level, but this is simpler. """
     max_l = max(len(x) for x in dataset["input_ids"])
     for name in PADDED_INPUTS:
-        dataset[name] = [x + [padding if name != "lm_labels" else -100] * (max_l - len(x)) for x in dataset[name]]
+        dataset[name] = [x + [padding if name != "lm_labels" or name != "das_to_return" else -100] * (max_l - len(x)) for x in dataset[name]]
     return dataset
 
 def collate_batch_elements(batch, tokenizer, args):
@@ -127,15 +127,20 @@ def collate_batch_elements(batch, tokenizer, args):
     # "lm_labels": [batch size, num_cands, seq_len]
     # "mc_labels": [batch_size]
     # "token_type_ids": [batch_size, num_cands, seq_len]
+    # "das_to_return": [batch_size]
 
     batch_size = tuple([len(batch_inputs[MODEL_INPUTS[0]])//args.num_candidates])
     for input_name in MODEL_INPUTS:
-        tensor = torch.tensor(padded_dataset[input_name])
-
-        if input_name != "mc_labels":
-            tensor = tensor.view((-1, args.num_candidates) + tensor.shape[1:])
+        if input_name != "das_to_return":
+            tensor = torch.tensor(padded_dataset[input_name])
+            if input_name != "mc_labels":
+                tensor = tensor.view((-1, args.num_candidates) + tensor.shape[1:])
+            else:
+                tensor = torch.ones(size=batch_size, dtype=torch.long) * (args.num_candidates - 1)
         else:
-            tensor = torch.ones(size=batch_size, dtype=torch.long) * (args.num_candidates - 1)
+            all_das = padded_dataset[input_name]
+            tensor = [all_das[i] for i in range(0, len(all_das), args.num_candidates)]
+
         tensorized_input.append(tensor)
     return tensorized_input
 
@@ -190,8 +195,7 @@ def generate_submissions(args):
     # model = model_class.from_pretrained(args.model_checkpoint)
     model.to(args.device)
 
-
-
+    all_das = []
     with torch.no_grad():
         for i, batch in tqdm(enumerate(loader)):
             if completed_index >= 0:
@@ -204,10 +208,10 @@ def generate_submissions(args):
             #     continue
             # batch = tuple(input_tensor.to(args.device) for input_tensor in batch)
 
-            input_ids, mc_token_ids, lm_labels, mc_labels, token_type_ids = batch
-
+            input_ids, mc_token_ids, lm_labels, mc_labels, token_type_ids, das_to_return = batch
             outputs += decode_sequences(input_ids, token_type_ids, model, tokenizer, args)
-
+            for each in das_to_return:
+                all_das.append(each)
             if i % args.log_every_n == 0:
                 logger.info("Saving outputs to cache at %s", args.submission_cache_path)
                 cache_file["outputs"] = outputs
@@ -219,10 +223,11 @@ def generate_submissions(args):
                 logger.info(f"Context: {context}")
                 logger.info(f"Sample output: {outputs[i*args.valid_batch_size]}")  # Log first sentence of that batch
     outputs_tags = []
-    for i in range(len(dataset)):
-        heuristic_tags = dataset._get_tags(i)
-        outputs_tags.append(outputs[i].replace("\n", "") + "".join(heuristic_tags) + "\n")
-    outputs_tags_file_path = args.output_file_path[-4] + "_tagged.txt"
+    print(f"outputs len: {len(outputs)}")
+    print(f"all_das len: {len(all_das)}")
+    for i in range(len(outputs)):
+        outputs_tags.append(outputs[i].replace("\n", "") + "".join(all_das[i]) + "\n")
+    outputs_tags_file_path = args.output_file_path[:-4] + "_tagged.txt"
     with open(outputs_tags_file_path, 'w') as output_file:
         output_file.writelines(outputs_tags)
     with open(args.output_file_path, 'w') as output_file:

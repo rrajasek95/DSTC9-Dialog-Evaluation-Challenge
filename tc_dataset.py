@@ -174,14 +174,6 @@ class TopicalChatsKDDataset(TopicalChatsDataset):
         das, knowledge = self.dialog_policy.get_knowledge_grounded_action(dialog_state)
         return das, self.tokenizer.encode(knowledge)
 
-    def _get_tags(self, index):
-        (history, (response, mezza_das, knowledge)) = self.dataset[index]
-        dialog_state = self._construct_dialog_state(history)
-        mezza_das, knowledge = self._execute_heuristic_policy(dialog_state)
-
-        mezza_das = [f"<{da}>" for da in mezza_das]
-        return mezza_das
-
     def __getitem__(self, index):
         (history, (response, mezza_das, knowledge)) = self.dataset[index]
 
@@ -193,6 +185,7 @@ class TopicalChatsKDDataset(TopicalChatsDataset):
             to "predict" the best knowledge and dialogue act to use for the next turn.
             """
             mezza_das, knowledge = self._execute_heuristic_policy(dialog_state)
+            das_to_return = [f"<{da}>" for da in mezza_das]
             mezza_das = self.tokenizer.encode([f"<{da}>" for da in mezza_das])
         history, fact = self.truncate_sequences(dialog_state["turn_history"], knowledge)
 
@@ -211,5 +204,7 @@ class TopicalChatsKDDataset(TopicalChatsDataset):
         for j, candidate in enumerate(candidates):
             lm_labels = bool(j == self.num_candidates - 1)
             instance = self.build_input_from_segments(history, candidate, action_plan, self.tokenizer, lm_labels)
+            instance['das_to_return'] = das_to_return
             instances.append(instance)
+
         return instances
