@@ -401,10 +401,10 @@ if __name__ == '__main__':
         assert prediction.strip() != "", "Predictions cannot be empty!"
 
     metrics = [
-        BLEUMetric(),
-        RougeMetric(),
+        # BLEUMetric(),
+        # RougeMetric(),
         BertScoreMetric(),
-        MeteorMetric(),
+        # MeteorMetric(),
         UnigramFScoreMetric(),
         NGramDiversity(n=1),
         NGramDiversity(n=2),
