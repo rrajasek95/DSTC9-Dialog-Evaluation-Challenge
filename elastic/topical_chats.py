@@ -105,6 +105,15 @@ class TopicalChatsIndexRetriever:
 
         return hits
 
+    def retrieve_facts_with_score(self, utterance):
+        q = Q("match", text=utterance)
+
+        s = TopicalChatsFact.search(using=self.alias).query(q)
+        response = s.execute()
+        hits = [(hit.text, hit.meta.score) for hit in s]
+        print(hits)
+        return hits
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

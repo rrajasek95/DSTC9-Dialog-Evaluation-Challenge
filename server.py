@@ -15,7 +15,7 @@ from tornado_swagger.setup import setup_swagger
 
 from transformers import GPT2Tokenizer, GPT2LMHeadModel
 
-from pd_nrg.ranker import TfIdfRankerRetriever
+from pd_nrg.ranker import TfIdfRankerRetriever, ElasticRankerRetriever
 from train_util.decode import top_filtering
 
 SPECIAL_TOKENS = ["<bos>", "<eos>", "<speaker1>", "<speaker2>", "<pad>"]
@@ -240,8 +240,10 @@ def make_app(args, logger):
 
     redis_client = redis.Redis(host=args.redis_host, port=args.redis_port, db=0)
 
-    index = _load_knowledge_index(args.knowledge_index_path)
-    ranker_retriever = TfIdfRankerRetriever(index, new_index=True)
+    # index = _load_knowledge_index(args.knowledge_index_path)
+    # ranker_retriever = TfIdfRankerRetriever(index, new_index=True)
+
+    ranker_retriever = ElasticRankerRetriever(args.elastic_host, args.elastic_port, args.elastic_alias)
     model, tokenizer = _load_model(args)
 
     routes = [
@@ -267,6 +269,13 @@ if __name__ == '__main__':
     parser.add_argument('--redis_host', type=str, default="localhost",
                         help="Hostname for Redis instance")
     parser.add_argument('--redis_port', type=int, default=6379)
+
+    parser.add_argument('--elastic_host', type=str, default="localhost",
+                        help="Hostname for elastic instance")
+    parser.add_argument('--elastic_port', type=int, default=9200,
+                        help="Port for elastic instance")
+    parser.add_argument('--elastic_alias', type=str, default="default",
+                        help="Alias for elastic instance")
     parser.add_argument('--session_expiry', type=int, default=43200,
                         help="Time after which to purge a session (in seconds)")
 
