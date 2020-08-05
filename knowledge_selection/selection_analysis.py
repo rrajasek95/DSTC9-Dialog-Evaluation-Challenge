@@ -21,8 +21,7 @@ def analyze_knowledge_selection_data(args):
 
     print("Number of utterances using knowledge explicitly: ", knowledge_usage.sum() / len( knowledge_usage))
     explicit_knowledge_utterances = explicit_knowledge_data[explicit_knowledge_data['uses_knowledge_explicitly'] == 1.]
-    explicit_knowledge_relevant = explicit_knowledge_utterances['top_knowledge_relevant']
-    print("Broad relevance to utterances percentage: ", relevance_specific.sum() / len(relevance_specific))
+    explicit_knowledge_relevant = explicit_knowledge_utterances['top_knowledge_relevant_specific']
 
     print("Unconditional relevance without threshold, accuracy: ", relevance_specific.sum() / len(relevance_specific))
     print("Relevance where knowledge usage is explicit", explicit_knowledge_relevant.sum() / len(explicit_knowledge_relevant))
@@ -42,7 +41,7 @@ def analyze_knowledge_selection_data(args):
 
     plt.title('ROC curve for knowledge selection threshold')
     threshold_df = pd.DataFrame({'true_positive_rate': tpr, 'false_positive_rate': fpr, 'threshold': thresholds})
-    threshold_df.to_csv('bert_threshold.csv',index=False)
+    threshold_df.to_csv('bert_summ_art_threshold.csv',index=False)
 
     plt.show()
 
