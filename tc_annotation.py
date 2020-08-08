@@ -8,6 +8,7 @@ import spacy
 import torch
 from flair.data import Sentence
 from flair.models import SequenceTagger
+from nltk import word_tokenize
 from tqdm.auto import tqdm
 
 from annotators.spotlight import SpotlightTagger
@@ -230,6 +231,27 @@ def spotlight_annotate(tagger, split_data):
 
     return split_data
 
+def lengthbin_annotate(split_data):
+    bins = {
+        0: "S",
+        1: "M",
+        2: "L"
+    }
+
+    for conv_id, dialog_data in tqdm(split_data.items()):
+
+        for turn in dialog_data["content"]:
+            segments = turn["segments"]
+
+            for segment in segments:
+                text = segment["text"]
+                tokens = word_tokenize(text)
+                length_bin_index = len(tokens) // 10
+
+                segment["length_bin"] = bins.get(length_bin_index, "L")
+
+    return split_data
+
 
 def perform_spotlight_anno(args):
     data_dir = os.path.join(
@@ -255,6 +277,31 @@ def perform_spotlight_anno(args):
         annotated_split = spotlight_annotate(tagger, split_data)
 
         with open(os.path.join(data_dir, split + '_anno_spotlight.json'), 'w') as annotated_file:
+            json.dump(annotated_split, annotated_file)
+
+
+
+def perform_length_binning_anno(args):
+    data_dir = os.path.join(
+        args.data_dir,
+        'tc_processed'
+    )
+
+    splits = [
+        'train',
+        'valid_freq',
+        'valid_rare',
+        'test_freq',
+        'test_rare'
+    ]
+
+    for split in splits:
+        with open(os.path.join(data_dir, split + '_anno.json'), 'r') as data_file:
+            split_data = json.load(data_file)
+
+        annotated_split = lengthbin_annotate(split_data)
+
+        with open(os.path.join(data_dir, split + '_anno_length_bin.json'), 'w') as annotated_file:
             json.dump(annotated_split, annotated_file)
 
 
@@ -362,7 +409,7 @@ if __name__ == '__main__':
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu",
                         help="Device (cuda or cpu)")
     args = parser.parse_args()
-    perform_athena_da_annotation(args)
+    # perform_athena_da_annotation(args)
     # merge_all_annotations(args)
     # perform_vader_annotation(args)
 
@@ -373,3 +420,4 @@ if __name__ == '__main__':
     #     # Lazy hacky way to perform flair annotation on existing data
     #     annotate_fresh_tc_data(args)
     #     perform_flair_enhanced_anno(args)
+    perform_length_binning_anno(args)
