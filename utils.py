@@ -34,6 +34,8 @@ def load_data(dataset_path, split, training_configuration):
         history_resp_file = path_prefix + (".tgt.da" if training_configuration == "kd-pd-nrg" else ".tgt.swbd3.da")
 
         history_da = [list(map(transform_da, l.strip().split("_eos")[:-1])) for l in open(history_da_file).readlines()]
+        history_da = [[each.replace("<>", "") for each in history_da[i]] for i in
+                      range(len(history_da))]
         history_knowledge = itertools.repeat(itertools.repeat(""))
         # history_knowledge = [l.strip().split("_eos")[:-1] for l in open(path_prefix + ".src.fct")]
         resp_da = [transform_da(l.strip()) for l in open(history_resp_file).readlines()]
