@@ -32,13 +32,12 @@ def analyze_da_utterances(args):
         for sent in sample:
             print(sent.text)
 
-def analyze_switchboard_da_realization():
-    with open('processed_output/valid_freq.tgt.swbd3.da', 'r') as valid_freq_plan:
+def analyze_da_realization(sentence_plan_path, realized_acts_path):
+    with open(sentence_plan_path, 'r') as valid_freq_plan:
         sentence_plans = [line.strip() for line in valid_freq_plan]
 
-    with open('submissions/kd-pd-nrg-swbd_submissions_valid_freq_acts.txt', 'r') as realized_acts:
+    with open(realized_acts_path, 'r') as realized_acts:
         realized_acts = [line.strip() for line in realized_acts]
-
 
 
     print(jiwer.compute_measures(sentence_plans, realized_acts))
@@ -59,4 +58,4 @@ if __name__ == '__main__':
                         default='processed_output/valid_freq.tgt.da')
     args = parser.parse_args()
     # analyze_da_utterances(args)
-    analyze_switchboard_da_realization()
+    analyze_da_realization(args.plan_file, args.predictions_file)
