@@ -223,9 +223,12 @@ def get_data_loaders_optimized(args, tokenizer):
     if args.dataset_configuration == "dstc9":
         topical_chat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache, args.training_configuration)
     else:
-        dact_scheme = "mezza_da" if args.training_configuration == "kd-pd-nrg" else "switchboard_da"
+        if args.training_configuration == "sentiment":
+            dact_scheme = "sentiment"
+        else:
+            dact_scheme = "mezza_da" if args.training_configuration == "kd-pd-nrg" else "switchboard_da"
         topical_chat = augmented_tc_dataset(tokenizer, args.dataset_path, args.dataset_cache,
-                                            args.knowledge_index_path, dact_scheme, args.knowledge_policy, args.training_configuration)
+                                            args.knowledge_index_path, dact_scheme, args.knowledge_policy)
 
     if args.training_configuration == "baseline":
         train_dataset, valid_dataset = TopicalChatsDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), \

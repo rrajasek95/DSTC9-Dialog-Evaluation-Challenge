@@ -261,11 +261,8 @@ def load_infersent_vecs(knowledge_index_path):
     return vecs
 
 
-def augmented_tc_dataset(tokenizer, dataset_path, dataset_cache, knowledge_index_path, dialog_act, knowledge_policy,
-                         training_config):
-    sentiment_flag = False
-    if training_config == "sentiment":
-        sentiment_flag = True
+def augmented_tc_dataset(tokenizer, dataset_path, dataset_cache, knowledge_index_path, dialog_act, knowledge_policy):
+    sentiment_flag = dialog_act == "sentiment"
     dataset_cache = dataset_cache + '_augmented_' + type(tokenizer).__name__
     if knowledge_policy == "infersent":
         vec = load_infersent_vecs(knowledge_index_path)
