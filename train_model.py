@@ -48,8 +48,8 @@ from pd_nrg.policies import (STATEMENT_NON_OPINION, STATEMENT_OPINION, YES_NO_QU
                              DECLARATIVE_WH_QUESTION, AGREE_ACCEPT, ACTION_DIRECTIVE, BACKCHANNEL_IN_QUESTION_FORM,
                              SIGNAL_NON_UNDERSTANDING, HEDGE, DECLARATIVE_YES_NO_QUESTION, NEGATIVE_NON_NO_ANSWERS,
                              OR_CLAUSE, OFFERS, MAYBE_ACCEPT_PART, AFFIRMATIVE_NON_YES_ANSWERS, REJECT,
-                             OTHER_ANSWERS, SUMMARIZE, YES_ANSWERS, DOWNPLAYER, RHETORICAL_QUESTIONS,
-                             HOLD_BEFORE_ANSWER, ACKNOWLEDGE, NO_ANSWERS, OTHER, NON_VERBAL, UNINTERPRETABLE,
+                             OTHER_ANSWERS, SUMMARIZE, YES_ANSWERS, DOWNPLAYER, RHETORICAL_QUESTION,
+                             HOLD_BEFORE_ANSWER, BACKCHANNEL_ACKNOWLEDGE, NO_ANSWERS, OTHER, NON_VERBAL, UNINTERPRETABLE,
                              TAG_QUESTION, EQUAL_PLUX, COLLABORATIVE_COMPLETION, THIRD_PARTY_TALK, REPEAT_PHRASE,
                              SELF_TALK, RESPONSE_ACKNOWLEDGE, QUOTATION, ABANDONED_OR_TURN_EXIT, DISPREFRRED_ANSWERS)
 
@@ -102,8 +102,8 @@ TRAINING_CONFIG_TOKENS = {
                                                                            NEGATIVE_NON_NO_ANSWERS, OR_CLAUSE, OFFERS,
                                                                            MAYBE_ACCEPT_PART, AFFIRMATIVE_NON_YES_ANSWERS,
                                                                            REJECT, OTHER_ANSWERS, SUMMARIZE, YES_ANSWERS,
-                                                                           DOWNPLAYER, RHETORICAL_QUESTIONS,
-                                                                           HOLD_BEFORE_ANSWER, ACKNOWLEDGE, OTHER, NON_VERBAL,
+                                                                           DOWNPLAYER, RHETORICAL_QUESTION,
+                                                                           HOLD_BEFORE_ANSWER, BACKCHANNEL_ACKNOWLEDGE, OTHER, NON_VERBAL,
                                                                            UNINTERPRETABLE, TAG_QUESTION, EQUAL_PLUX,
                                                                            COLLABORATIVE_COMPLETION, THIRD_PARTY_TALK,
                                                                            REPEAT_PHRASE, SELF_TALK, RESPONSE_ACKNOWLEDGE,
@@ -388,7 +388,7 @@ def train():
                         help="Configuration of dataset to load for training",
                         choices=["dstc9", "topical-chats"])
     
-    parser.add_argument('--knowledge_index_path', type=str, default="./tc_processed/tc_knowledge_index.pkl",
+    parser.add_argument('--knowledge_index_path', type=str, default="tc_processed",
                         help="Path to knowledge index file")
     parser.add_argument("--dataset_cache", type=str, default='./dataset_caches', help="Path or url of the dataset cache")
     parser.add_argument("--model_checkpoint", type=str, default="gpt2-medium",

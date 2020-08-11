@@ -338,5 +338,3 @@ class TopicalChatsSentimentDataset(TopicalChatsDataset):
             instances.append(instance)
 
         return instances
-
-

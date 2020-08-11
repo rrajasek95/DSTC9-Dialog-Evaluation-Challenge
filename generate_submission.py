@@ -10,7 +10,7 @@ from tqdm.auto import tqdm
 from transformers import OpenAIGPTTokenizer, GPT2Tokenizer, OpenAIGPTDoubleHeadsModel
 
 from gpt2 import GPT2DoubleHeadsModel
-from tc_dataset import TopicalChatsDataset, TopicalChatsKDDataset
+from tc_dataset import TopicalChatsDataset, TopicalChatsKDDataset, TopicalChatsSWBDDataset
 from train_util.decode import top_filtering
 from utils import get_dataset, augmented_tc_dataset
 import torch.nn.functional as F
@@ -157,6 +157,9 @@ def get_loader(args, tokenizer):
         # Free up memory from unneeded splits
     if args.training_configuration == "baseline":
         dataset = TopicalChatsDataset(topical_chat[args.split], tokenizer, SPECIAL_TOKENS, args)
+    elif args.training_configuration == "kd-pd-nrg-swbd":
+        dataset = TopicalChatsSWBDDataset(topical_chat[args.split], tokenizer, SPECIAL_TOKENS, args,
+                                          inference=args.heuristic_policy)
     else:
         dataset = TopicalChatsKDDataset(topical_chat[args.split], tokenizer, SPECIAL_TOKENS, args,
                                         inference=args.heuristic_policy)  # Enable heuristic dialog policy
@@ -190,7 +193,7 @@ def generate_submissions(args):
     # model I previously trained. This needs to be fixed in the original training script as well
     data = torch.load(args.model_checkpoint + '/pytorch_model.bin')
     model = data["mymodel"]
-    print(model)
+    # print(model)
 
     # model = model_class.from_pretrained(args.model_checkpoint)
     model.to(args.device)
@@ -209,6 +212,9 @@ def generate_submissions(args):
             # batch = tuple(input_tensor.to(args.device) for input_tensor in batch)
 
             input_ids, mc_token_ids, lm_labels, mc_labels, token_type_ids, das_to_return = batch
+            if len(das_to_return) != len(input_ids):
+                print(len(all_das))
+                print(das_to_return)
             outputs += decode_sequences(input_ids, token_type_ids, model, tokenizer, args)
             for each in das_to_return:
                 all_das.append(each)

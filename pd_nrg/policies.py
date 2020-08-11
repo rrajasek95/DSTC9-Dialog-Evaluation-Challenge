@@ -15,50 +15,52 @@ PROP_Q = "PropQ"
 STATEMENT = "Statement"
 FEEDBACK = "Feedback"
 
+UNINTERPRETABLE = "uninterpretable"
 
-STATEMENT_NON_OPINION = "Statement-non-opinion"
-STATEMENT_OPINION = "Statement-opinion"
-YES_NO_QUESTION = "Yes-No-Question"
-APPRECIATION = "Appreciation"
-WH_QUESTION = "Wh-Question"
-CONVENTIONAL_CLOSING = "Conventional-closing"
-OPEN_QUESTION = "Open-Question"
-CONVENTIONAL_OPENING = "Conventional-opening"
-DECLARATIVE_WH_QUESTION = "Declarative Wh-Question"
-AGREE_ACCEPT = "Agree/Accept"
-ACTION_DIRECTIVE = "Action-directive"
-BACKCHANNEL_IN_QUESTION_FORM = "Backchannel in question form"
-SIGNAL_NON_UNDERSTANDING = "Signal-non-understanding"
-HEDGE = "HEDGE"
-DECLARATIVE_YES_NO_QUESTION = "Declarative Yes-No-Question"
-NEGATIVE_NON_NO_ANSWERS = "Negative non-no answers"
-OR_CLAUSE = "Or-Clause"
-OFFERS = "Offers, Options, Commits"
-MAYBE_ACCEPT_PART = "Maybe/Accept-part"
-AFFIRMATIVE_NON_YES_ANSWERS = "Affirmative non-yes answers"
-REJECT = "Reject"
-OTHER_ANSWERS = "Other answers"
-SUMMARIZE = "Summarize/reformulate"
-YES_ANSWERS = "Yes answers"
-DOWNPLAYER = "Downplayer"
-RHETORICAL_QUESTIONS = "Rhetorical-QUestions"
-HOLD_BEFORE_ANSWER = "Hold before answer/agreement"
-ACKNOWLEDGE = "Acknowledge"
-NO_ANSWERS = "No answers"
-OTHER = "Other"
-NON_VERBAL = "Non-verbal"
-UNINTERPRETABLE = "Uninterpretable"
-TAG_QUESTION = "Tag-Question"
-EQUAL_PLUX = "=+"
-COLLABORATIVE_COMPLETION = "Collaborative Completion"
+SPOKEN_ARTIFACT = "spoken-artifact"
+ABANDONED_OR_TURN_EXIT = "abandoned-or-turn-exit"
+EQUAL_PLUX = "+"
+COLLABORATIVE_COMPLETION = "collaborative-completion"
+TAG_QUESTION = "tag-question"
+HOLD_BEFORE_ANSWER = "hold-before-answer-agreement"
+QUOTATION = "quotation"
+AGREE_ACCEPT = "agree"
+MAYBE_ACCEPT_PART = "maybe-accept-part"
+ACTION_DIRECTIVE = "action-directive"
+REJECT = "reject"
+DISPREFRRED_ANSWERS = "dispreferred-answers"
+BACKCHANNEL_ACKNOWLEDGE = "acknowledge"
+REPEAT_PHRASE = "repeat-phrase"
+APPRECIATION = "appreciation"
+DOWNPLAYER = "downplayer"
+SUMMARIZE = "summarize-reformulate"
+BACKCHANNEL_IN_QUESTION_FORM = "backchannel in question form"
+RESPONSE_ACKNOWLEDGE = "response acknowledgement"
+SIGNAL_NON_UNDERSTANDING = "signal-non-understanding"
+APOLOGY_SWBD = "apology"
+CONVENTIONAL_CLOSING = "conventional-closing"
+OTHER = "other"
+CONVENTIONAL_OPENING = "conventional-opening"
+THANKING_SWBD = "thanking"
+HEDGE = "hedge"
+AFFIRMATIVE_NON_YES_ANSWERS = "affirmative-non-yes-answers"
+NEGATIVE_NON_NO_ANSWERS = "negative non-no answers"
+NO_ANSWERS = "no-answers"
+OTHER_ANSWERS = "other-answers"
+YES_ANSWERS = "yes-answers"
+OFFERS = "offer-options-commits"
+RHETORICAL_QUESTION = "rhetorical-question"
+OPEN_QUESTION = "open-question"
+OR_CLAUSE = "or-clause"
+WH_QUESTION = "wh-question"
+DECLARATIVE_WH_QUESTION = "declarative wh-Question"
+YES_NO_QUESTION = "yes-no-question"
+DECLARATIVE_YES_NO_QUESTION = "declarative yes-no-question"
+STATEMENT_NON_OPINION = "statement-non-opinion"
+STATEMENT_OPINION = "statement-opinion"
+SELF_TALK = "self-talk"
 THIRD_PARTY_TALK = "3rd-party-talk"
-REPEAT_PHRASE = "Repeat-phrase"
-SELF_TALK = "Self-talk"
-RESPONSE_ACKNOWLEDGE = "Response Acknowledgement"
-QUOTATION = "Quotation"
-ABANDONED_OR_TURN_EXIT = "Abandoned or Turn-Exit"
-DISPREFRRED_ANSWERS = "Dispreferred answers"
-
+NON_VERBAL = "non-verbal"
 
 
 class DialogPolicy(object):
@@ -181,6 +183,7 @@ class KnowledgeIndependentPropQ(DialogPolicy):
     def _includes_knowledge(self, act):
         return self.include_knowledge.get(act, False)
 
+
 class KnowledgeIndependentAllQ(DialogPolicy):
     def __init__(self):
         self.include_knowledge = {
@@ -225,6 +228,7 @@ class KnowledgeDependent(DialogPolicy):
     clean design I could think of in the short term, although I prefer something
     better.
     """
+
     def get_knowledge_grounded_action(self, dialog_state):
         da_history = dialog_state["da_history"]
         knowledge = self.retrieve_knowledge(dialog_state)
@@ -299,6 +303,22 @@ class KnowledgeDependent(DialogPolicy):
 
 class KnowledgeIndependentSWBDPolicy(DialogPolicy):
     def __init__(self):
+        ABANDONED_OR_TURN_EXIT, EQUAL_PLUX, COLLABORATIVE_COMPLETION, TAG_QUESTION, HOLD_BEFORE_ANSWER, \
+        QUOTATION, AGREE_ACCEPT, MAYBE_ACCEPT_PART, ACTION_DIRECTIVE, REJECT, DISPREFRRED_ANSWERS, \
+        BACKCHANNEL_ACKNOWLEDGE, REPEAT_PHRASE, APPRECIATION, DOWNPLAYER, SUMMARIZE, BACKCHANNEL_IN_QUESTION_FORM, \
+        RESPONSE_ACKNOWLEDGE, SIGNAL_NON_UNDERSTANDING, APOLOGY_SWBD, CONVENTIONAL_CLOSING, OTHER, CONVENTIONAL_OPENING, \
+        THANKING_SWBD, HEDGE, AFFIRMATIVE_NON_YES_ANSWERS, NEGATIVE_NON_NO_ANSWERS, NO_ANSWERS, OTHER_ANSWERS, \
+        YES_ANSWERS, OFFERS, RHETORICAL_QUESTION, OPEN_QUESTION, OR_CLAUSE, WH_QUESTION, DECLARATIVE_WH_QUESTION, \
+        YES_NO_QUESTION, DECLARATIVE_YES_NO_QUESTION, STATEMENT_NON_OPINION, STATEMENT_OPINION, SELF_TALK, \
+        THIRD_PARTY_TALK, NON_VERBAL \
+            = "spoken-artifact", "+", "spoken-artifact", "tag-question", "spoken-artifact", "statement-opinion", \
+              "agree", "agree", "action-directive", "disagree", "disagree", "backchannel", "spoken-artifact", \
+              "appreciation", "downplayer", "summarize-reformulate", "backchannel-in-question-form", "backchannel", \
+              "signal-non-understanding", "apology", "conventional-closing", "backchannel", "conventional-opening", \
+              "thanking", "hedge", "affirmative-non-yes-answer", "negative-non-no-answer", "no-answer", "hedge", \
+              "yes-answer", "offers-options-commits", "rhetorical-question", "open-question", "or-clause", \
+              "wh-question", "wh-question", "yes-no-question", "yes-no-question", "statement-non-opinion", \
+              "statement-opinion", "spoken-artifact", "spoken-artifact", "spoken-artifact"
         self.include_knowledge = {
             STATEMENT_NON_OPINION: True,
             STATEMENT_OPINION: True,
@@ -323,12 +343,12 @@ class KnowledgeIndependentSWBDPolicy(DialogPolicy):
             SUMMARIZE: False,
             YES_ANSWERS: False,
             DOWNPLAYER: False,
-            RHETORICAL_QUESTIONS: True,
+            RHETORICAL_QUESTION: True,
             HOLD_BEFORE_ANSWER: False,
-            ACKNOWLEDGE: False,
+            BACKCHANNEL_ACKNOWLEDGE: False,
             NO_ANSWERS: False,
             OTHER: False,
-            APOLOGY: False,
+            APOLOGY_SWBD: False,
             NO_DIALOGUE_ACT: True
         }
 
@@ -350,7 +370,7 @@ class KnowledgeIndependentSWBDPolicy(DialogPolicy):
         else:
             acts = []
             weights = []
-            if da_history[-1] == ACKNOWLEDGE:
+            if da_history[-1] == BACKCHANNEL_ACKNOWLEDGE:
                 acts = [[STATEMENT_OPINION, STATEMENT_NON_OPINION], [YES_NO_QUESTION, OPEN_QUESTION]]
                 weights = self._normalized_weight([8.9, 1.3])
             elif da_history[-1] == ACTION_DIRECTIVE:
@@ -362,8 +382,8 @@ class KnowledgeIndependentSWBDPolicy(DialogPolicy):
             elif da_history[-1] == AGREE_ACCEPT:
                 acts = [[YES_NO_QUESTION, STATEMENT_OPINION], [STATEMENT_OPINION, STATEMENT_NON_OPINION]]
                 weights = self._normalized_weight([3.5, 17.6])
-            elif da_history[-1] == APOLOGY:
-                acts = [[STATEMENT_NON_OPINION, STATEMENT_OPINION], [ACKNOWLEDGE, STATEMENT_OPINION]]
+            elif da_history[-1] == APOLOGY_SWBD:
+                acts = [[STATEMENT_NON_OPINION, STATEMENT_OPINION], [BACKCHANNEL_ACKNOWLEDGE, STATEMENT_OPINION]]
                 weights = self._normalized_weight(([0.1, 0.1]))
             elif da_history[-1] == BACKCHANNEL_IN_QUESTION_FORM:
                 acts = [[STATEMENT_OPINION, STATEMENT_NON_OPINION], [STATEMENT_OPINION, WH_QUESTION]]
@@ -416,6 +436,9 @@ class KnowledgeIndependentSWBDPolicy(DialogPolicy):
             elif da_history[-1] == YES_NO_QUESTION:
                 acts = [[YES_ANSWERS, STATEMENT_OPINION], [NO_ANSWERS, STATEMENT_OPINION]]
                 weights = self._normalized_weight([0.5, 0.5])
+            else:
+                acts = [[STATEMENT_OPINION, STATEMENT_NON_OPINION], [STATEMENT_OPINION, OPEN_QUESTION]]
+                weights = self._normalized_weight([0.5, 0.5])
         return acts, weights
 
     def _get_action_space_intra_turn(self, dialog_state):
@@ -427,7 +450,7 @@ class KnowledgeIndependentSWBDPolicy(DialogPolicy):
         else:
             acts = []
             weights = []
-            if da_history[-1] == ACKNOWLEDGE:
+            if da_history[-1] == BACKCHANNEL_ACKNOWLEDGE:
                 acts = [[STATEMENT_OPINION, STATEMENT_NON_OPINION], [STATEMENT_NON_OPINION, YES_NO_QUESTION]]
                 weights = self._normalized_weight([13.3, 8.3])
             elif da_history[-1] == ACTION_DIRECTIVE:
@@ -439,7 +462,7 @@ class KnowledgeIndependentSWBDPolicy(DialogPolicy):
             elif da_history[-1] == AGREE_ACCEPT:
                 acts = [[YES_NO_QUESTION, STATEMENT_OPINION], [STATEMENT_NON_OPINION, STATEMENT_OPINION]]
                 weights = self._normalized_weight([4.7, 17.7])
-            elif da_history[-1] == APOLOGY:
+            elif da_history[-1] == APOLOGY_SWBD:
                 acts = [[STATEMENT_NON_OPINION, STATEMENT_OPINION], [STATEMENT_OPINION, YES_NO_QUESTION]]
                 weights = self._normalized_weight(([11.1, 13.6]))
             elif da_history[-1] == APPRECIATION:
@@ -478,7 +501,7 @@ class KnowledgeIndependentSWBDPolicy(DialogPolicy):
             elif da_history[-1] == STATEMENT_OPINION:
                 acts = [[STATEMENT_NON_OPINION, STATEMENT_NON_OPINION], [STATEMENT_NON_OPINION, YES_NO_QUESTION]]
                 weights = self._normalized_weight([17.3, 5.6])
-            elif da_history[-1] == THANKING:
+            elif da_history[-1] == THANKING_SWBD:
                 acts = [[STATEMENT_OPINION, CONVENTIONAL_CLOSING], [STATEMENT_OPINION, YES_NO_QUESTION]]
                 weights = self._normalized_weight([1.9, 6.5])
             elif da_history[-1] == WH_QUESTION:
@@ -490,6 +513,9 @@ class KnowledgeIndependentSWBDPolicy(DialogPolicy):
             elif da_history[-1] == YES_NO_QUESTION:
                 acts = [[STATEMENT_OPINION, STATEMENT_NON_OPINION], [STATEMENT_OPINION, YES_NO_QUESTION]]
                 weights = self._normalized_weight([14.2, 4.5])
+            else:
+                acts = [[STATEMENT_OPINION, STATEMENT_NON_OPINION], [STATEMENT_OPINION, OPEN_QUESTION]]
+                weights = self._normalized_weight([0.5, 0.5])
         return acts, weights
 
     def _includes_knowledge(self, act):
