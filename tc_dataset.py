@@ -4,7 +4,7 @@ import random
 
 from torch.utils.data import Dataset
 
-from pd_nrg.policies import KnowledgeDependent
+from pd_nrg.policies import KnowledgeDependent, KnowledgeIndependentSWBDPolicy
 
 
 from pd_nrg.ranker import TfIdfRankerRetriever
@@ -15,7 +15,6 @@ class TopicalChatsDataset(Dataset):
     """
     It's absolutely necessary to create a dataset class since
     the amount of data is huge.
-
     I wonder if there are other optimization opportunities
     - Rishi
     """
@@ -70,7 +69,6 @@ class TopicalChatsDataset(Dataset):
         Considerations for design:
         1. Topical chat examples are created by adding a response every turn
         2. Last turn is always speaker2
-
         To my knowledge, the position of the fact in input is mostly immaterial due to
         the self-attention mechanism (since all tokens are equidistant). The positional
         embeddings affect only the contextual representation (I think!)
@@ -205,6 +203,89 @@ class TopicalChatsKDDataset(TopicalChatsDataset):
             lm_labels = bool(j == self.num_candidates - 1)
             instance = self.build_input_from_segments(history, candidate, action_plan, self.tokenizer, lm_labels)
             instance['das_to_return'] = das_to_return
+            instances.append(instance)
+
+        return instances
+
+
+class TopicalChatsSWBDDataset(TopicalChatsDataset):
+
+    def __init__(self, dataset, tokenizer, special_tokens, args, inference=False):
+        self.dialog_policy = KnowledgeIndependentSWBDPolicy()
+
+        # For inference, the model will start executing the
+        # heuristic dialog policy
+        self.inference = inference
+        self.dataset_configuration = args.dataset_configuration
+        super().__init__(dataset, tokenizer, special_tokens, args)
+
+    def sample_candidates(self, dataset, current_conversation_index):
+        # Lets just hope that the number of cases where the true responses gets included in the
+        # candidates is vanishingly small
+        candidates = [response for (_, (response, _, _)) in random.sample(dataset, self.num_candidates - 1)]
+
+        return candidates
+
+    def _construct_dialog_state(self, history):
+        turn_history = []
+        da_history = []
+        knowledge_history = [""]  # Hack to always have empty
+        inter_turn = True
+        for (response, das, past_knowledge) in history:
+            turn_history.append(response)
+            da_history += das
+            if self.inference:
+                # Knowledge history only matters during inference
+                # this also optimizes running an unnecessary decode
+                # during training
+                knowledge_history.append(self.tokenizer.decode(past_knowledge))
+
+        dialog_state = {
+            "turn_history": turn_history,
+            "da_history": da_history,
+            "knowledge_history": knowledge_history,
+            "inter_turn": inter_turn
+        }
+
+        return dialog_state
+
+    def _execute_heuristic_policy(self, dialog_state):
+        das = self.dialog_policy.get_action(dialog_state)
+        return das
+
+    def __getitem__(self, index):
+        (history, (response, mezza_das, knowledge)) = self.dataset[index]
+
+        dialog_state = self._construct_dialog_state(history)
+        if self.inference:
+            """
+            During inference time, there is no ground truth utterance to 
+            choose the appropriate knowledge on. So we use a heuristic policy 
+            to "predict" the best knowledge and dialogue act to use for the next turn.
+            """
+
+            mezza_das = self._execute_heuristic_policy(dialog_state)
+            das_to_return = [f"<{da}>" for da in mezza_das]
+            mezza_das = self.tokenizer.encode([f"<{da}>" for da in mezza_das])
+
+        candidates = self.sample_candidates(self.dataset, index)
+        candidates.append(response)
+        if self.dataset_configuration != "dstc9":
+            encoded_das = self.tokenizer.encode([f"<{da['da']}>" for da in mezza_das])
+        else:
+            encoded_das = mezza_das
+        instances = []
+
+        # The action plan must be ground-truth for training and validation
+        # However, for inference time, it must follow the policy
+        action_plan = encoded_das
+        for j, candidate in enumerate(candidates):
+            lm_labels = bool(j == self.num_candidates - 1)
+            instance = self.build_input_from_segments([], candidate, action_plan, self.tokenizer, lm_labels)
+            instance['das_to_return'] = das_to_return
+            if len(das_to_return) == 0:
+                print(index)
+                print([self.tokenizer.decode([each for each in sentences]) for sentences in dialog_state['turn_history']])
             instances.append(instance)
 
         return instances
