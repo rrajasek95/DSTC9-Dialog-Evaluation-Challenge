@@ -106,7 +106,7 @@ def extract_fact_set_mapped(factsets):
     return original_sentences
 
 
-def process_split(dataset_path, split, tokenizer, index, knowledge_policy):
+def process_split(dataset_path, split, tokenizer, index, knowledge_policy, sentiment=False):
     if knowledge_policy == "infersent":
         V = 2
         MODEL_PATH = 'encoder/infersent%s.pkl' % V
@@ -210,8 +210,10 @@ def process_split(dataset_path, split, tokenizer, index, knowledge_policy):
                             if similarities[closest_knowledge_index] > 0.3 else ""
 
                 original_knowledge_sentence = agent_mapping[turn["agent"]].get(knowledge_sentence, "")
-                current_turn_data = (
-                tokenizer.encode(response), turn[dialog_act], tokenizer.encode(original_knowledge_sentence))
+                if sentiment:
+                    current_turn_data = (tokenizer.encode(response), turn["sentiment_vader"], tokenizer.encode(original_knowledge_sentence))
+                else:
+                    current_turn_data = (tokenizer.encode(response), turn[dialog_act], tokenizer.encode(original_knowledge_sentence))
                 data.append((context, current_turn_data))
                 context = context + [current_turn_data]
 
@@ -259,7 +261,11 @@ def load_infersent_vecs(knowledge_index_path):
     return vecs
 
 
-def augmented_tc_dataset(tokenizer, dataset_path, dataset_cache, knowledge_index_path, dialog_act, knowledge_policy):
+def augmented_tc_dataset(tokenizer, dataset_path, dataset_cache, knowledge_index_path, dialog_act, knowledge_policy,
+                         training_config):
+    sentiment_flag = False
+    if training_config == "sentiment":
+        sentiment_flag = True
     dataset_cache = dataset_cache + '_augmented_' + type(tokenizer).__name__
     if knowledge_policy == "infersent":
         vec = load_infersent_vecs(knowledge_index_path)
@@ -280,7 +286,8 @@ def augmented_tc_dataset(tokenizer, dataset_path, dataset_cache, knowledge_index
 
         dataset = {}
         for split in splits:
-            dataset[split] = process_split(dataset_path, split, tokenizer, (vec, dialog_act), knowledge_policy)
+            dataset[split] = process_split(dataset_path, split, tokenizer, (vec, dialog_act), knowledge_policy,
+                                           sentiment=sentiment_flag)
             logger.info("Processed split %s", split)
         torch.save(dataset, dataset_cache)
 

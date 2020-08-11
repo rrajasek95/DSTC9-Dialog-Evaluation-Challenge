@@ -149,7 +149,8 @@ def get_loader(args, tokenizer):
         topical_chat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache, args.training_configuration)
     else:
         topical_chat = augmented_tc_dataset(tokenizer, args.dataset_path, args.dataset_cache,
-                                            args.knowledge_index_path, args.training_configuration, args.knowledge_policy)
+                                            args.knowledge_index_path, args.training_configuration, args.knowledge_policy,
+                                            args.training_configuration)
     splits = list(topical_chat.keys())
     for split in splits:
         if split != args.split:

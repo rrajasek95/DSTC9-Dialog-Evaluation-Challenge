@@ -141,7 +141,7 @@ testpath==0.4.4
 Theano==1.0.4
 thinc==6.10.3
 threadpoolctl==2.1.0
-tokenizers==0.7.0
+tokenizers==0.8.0
 toolz==0.10.0
 torch==1.5.1
 torchtext==0.3.1

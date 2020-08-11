@@ -208,3 +208,54 @@ class TopicalChatsKDDataset(TopicalChatsDataset):
             instances.append(instance)
 
         return instances
+
+
+class TopicalChatsSentimentDataset(TopicalChatsDataset):
+
+    def __init__(self, dataset, tokenizer, special_tokens, args, inference=False):
+        super().__init__(dataset, tokenizer, special_tokens, args)
+
+    def _construct_dialog_state(self, history):
+        turn_history = []
+        sentiment_history = []
+        knowledge_history = [""]  # Hack to always have empty
+        for (response, sentiments, past_knowledge) in history:
+            turn_history.append(response)
+            sentiment_history += sentiments
+
+        dialog_state = {
+            "turn_history": turn_history,
+            "sentiment_history": sentiment_history,
+            "knowledge_history": knowledge_history
+        }
+
+        return dialog_state
+
+    def __getitem__(self, index):
+        (history, (response, sentiment, knowledge)) = self.dataset[index]
+
+        dialog_state = self._construct_dialog_state(history)
+        history, fact = self.truncate_sequences(dialog_state["turn_history"], knowledge)
+
+        candidates = self.sample_candidates(self.dataset, index)
+        candidates.append(response)
+
+        instances = []
+
+        # The action plan must be ground-truth for training and validation
+        # However, for inference time, it must follow the policy
+        uses_fact = self.tokenizer.encode("_nofact" if len(knowledge) <= 1 else "_fact")
+        sentiments = []
+        for dict in sentiment:
+            sentiments.append("<" + dict["label"] + ">")
+
+        sentiment_encoded = self.tokenizer.encode(sentiments)
+        action_plan = sentiment_encoded + fact + uses_fact
+        for j, candidate in enumerate(candidates):
+            lm_labels = bool(j == self.num_candidates - 1)
+            instance = self.build_input_from_segments(history, candidate, action_plan, self.tokenizer, lm_labels)
+            instances.append(instance)
+
+        return instances
+
+
