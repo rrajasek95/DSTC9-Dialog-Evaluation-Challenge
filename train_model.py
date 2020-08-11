@@ -32,7 +32,7 @@ from torch.utils.data import DataLoader
 from transformers import AdamW, GPT2Tokenizer
 from gpt2 import GPT2DoubleHeadsModel
 
-from tc_dataset import TopicalChatsDataset, TopicalChatsKDDataset
+from tc_dataset import TopicalChatsDataset, TopicalChatsKDDataset, TopicalChatsSentimentDataset
 from train_util.decode import top_filtering
 from train_util.metrics import RunningMetric, RunningLambdaMetric, MetricLambda
 from train_util.scheduler import PiecewiseLinearLR
@@ -57,6 +57,7 @@ logger = logging.getLogger(__file__)
 
 # The _nofact token needs to be added
 ADDITIONAL_TOKENS = ["_nofact"]
+SENTIMENT_TOKENS = ["<POS>", "<NEG>", "<NEU>"]
 SPECIAL_TOKENS = ["<bos>", "<eos>", "<speaker1>", "<speaker2>", "<pad>"]
 
 NEW_SWITCHBOARD_TOKENS = list(
@@ -73,6 +74,11 @@ TRAINING_CONFIG_TOKENS = {
     "baseline": {
         "additional_tokens": ADDITIONAL_TOKENS,
         "special_tokens": SPECIAL_TOKENS
+    },
+
+    "sentiment": {
+        "additional_tokens": ADDITIONAL_TOKENS + SENTIMENT_TOKENS,
+        "special_tokens": SPECIAL_TOKENS,
     },
 
     "kd-pd-nrg": {
@@ -217,13 +223,20 @@ def get_data_loaders_optimized(args, tokenizer):
     if args.dataset_configuration == "dstc9":
         topical_chat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache, args.training_configuration)
     else:
-        dact_scheme = "mezza_da" if args.training_configuration == "kd-pd-nrg" else "switchboard_da"
+        if args.training_configuration == "sentiment":
+            dact_scheme = "sentiment"
+        else:
+            dact_scheme = "mezza_da" if args.training_configuration == "kd-pd-nrg" else "switchboard_da"
         topical_chat = augmented_tc_dataset(tokenizer, args.dataset_path, args.dataset_cache,
                                             args.knowledge_index_path, dact_scheme, args.knowledge_policy)
 
     if args.training_configuration == "baseline":
         train_dataset, valid_dataset = TopicalChatsDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), \
                                        TopicalChatsDataset(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS, args)
+    elif args.training_configuration == "sentiment":
+        train_dataset, valid_dataset = TopicalChatsSentimentDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), \
+                                       TopicalChatsSentimentDataset(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS,
+                                                             args)
     else:
         train_dataset, valid_dataset = TopicalChatsKDDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), \
                                        TopicalChatsKDDataset(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS, args)
@@ -368,9 +381,9 @@ def train():
 
     parser.add_argument("--dataset_path", type=str, default="processed_output",
                         help="Path or url of the dataset. If empty download from S3.")
-    parser.add_argument('--training_configuration', type=str, default="kd-pd-nrg",
+    parser.add_argument('--training_configuration', type=str, default="sentiment",
                         help="Training configuration to run",
-                        choices=["baseline", "kd-pd-nrg", "kd-pd-nrg-swbd"])
+                        choices=["baseline", "kd-pd-nrg", "kd-pd-nrg-swbd", "sentiment"])
     parser.add_argument('--dataset_configuration', type=str, default="topical-chats",
                         help="Configuration of dataset to load for training",
                         choices=["dstc9", "topical-chats"])
@@ -426,7 +439,7 @@ def train():
                         help="Nucleus filtering (top-p) before sampling (<=0.0: no filtering)")
     parser.add_argument("--no_sample", action='store_true', help="Set to use greedy decoding instead of sampling")
     parser.add_argument("--max_length", type=int, default=20, help="Maximum length of the output utterances")
-    parser.add_argument("--knowledge_policy", type=str, default="infersent", choices=["tf_idf", "embeddings", "infersent", "bert"])
+    parser.add_argument("--knowledge_policy", type=str, default="tf_idf", choices=["tf_idf", "embeddings", "infersent", "bert"])
     args = parser.parse_args()
 
     # logging is set to INFO (resp. WARN) for main (resp. auxiliary) process. logger.info => log main process only, logger.warning => log all processes
