@@ -1,145 +1,24 @@
-"""
-This script tries to adapt the PPLM framework to be used with a Dialog Act tagger. In this case, I try to use
-the SWBD DA tagger.
-
-The model construction is very unusual because of the following:
-1. We have a conditional language model p(x | c, k) conditioned on dialog history c and knowledge k
-2. We have an unconditional discriminator p(DA | x) that predicts a dialog act on x
-
-Goal is to construct a model p(x | DA, c, k)
-
-p(x | DA, c , k) = p(DA | x, c, k) * p (x | c, k) / p(DA | c, k)
-
-The model is constructed by making some **very** strong simplifying assumptions:
-1. p(DA | x, c, k) = p (DA | x)
-2. p(DA | c, k) = p(DA)
-
-p(x | DA, c, k) = p(DA | x ) * p (x | c, k) / P(DA)
-or, more simply,
-p(x | DA, c, k) ∝ p(DA | x ) * p (x | c, k)
-
-Namely, that the disciminator is unconditional on c, k. I don't know if this is a valid assumption, but I am
-operating on a hunch that it is. This allows me to use an existing dialog act classifier
-that is not trained on k, c information. This is a verification of that assumption.
-
-Our goal is to sample from p(x | DA, c, k) to produce outputs of a specific DA. This creates a very flexible
-sentence planning model.
-"""
 import argparse
-import logging
-import os
 import pickle
-import sys
-from collections import defaultdict
-from itertools import chain
 from operator import add
-
-import dill
-import nltk
-import torch
-from torch.nn import CrossEntropyLoss
-from torch.utils.data import DataLoader
-import torch.nn.functional as F
-from tqdm import tqdm, trange
-from transformers import GPT2Tokenizer
-
-from DA_Classifier import train, Dataset
-from gpt2 import GPT2DoubleHeadsModel, GPT2LMHeadModel
-from tc_dataset import TopicalChatsDataset
-from train_util.decode import top_filtering
-from utils import get_dataset
 
 import numpy as np
 
-logger = logging.getLogger(__name__)
-logger.addHandler(logging.StreamHandler(sys.stdout))
-logger.setLevel(logging.DEBUG)
+import torch
+import torch.nn.functional as F
 
-DISCRIMINATOR_MODELS_PARAMS = {
-    "description": """
-    The discriminator is a Dialog Act Tagger (BiLSTM-CRF)     
-    """,
-    "path": os.path.join('DA_Classifier', 'cached_models', 'm3_acc79.84_loss0.58_e4.pt')
-}
+from transformers import GPT2LMHeadModel, GPT2Tokenizer
 
-MODEL_INPUTS = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "token_type_ids"]
-SPECIAL_TOKENS = ["<bos>", "<eos>", "<speaker1>", "<speaker2>", "<pad>"]
-PADDED_INPUTS = ["input_ids", "lm_labels", "token_type_ids"]
+from tqdm.auto import tqdm, trange
+
+from taggers.models import PPLMGPT2Classifier
 
 SMALL_CONST = 1e-15
 BIG_CONST = 1e10
 
-
-PAD = Dataset.PAD
-UNK = Dataset.UNK
-
-def load_discriminator(args):
-
-    logger.info("Loading the Discriminative BiLSTM-CRF model")
-    checkpoint = torch.load(DISCRIMINATOR_MODELS_PARAMS["path"], pickle_module=pickle, map_location=args.device)
-    fields = checkpoint["fields"]
-    model_opt = checkpoint["opt"]
-
-    embedding_size = model_opt.word_vec_size
-    embeddings = train.build_embeddings(model_opt, fields["conversation"], embedding_size)
-
-    model = train.build_model(model_opt, fields, embeddings)
-    model.load_state_dict(checkpoint["model"])
-
-    model.eval()
-    logger.info(model)
-    logger.info(fields)
-    return model, fields
-
-def pad_dataset(dataset, padding=0):
-    """ Pad the dataset. This could be optimized by defining a Dataset class and padding at the batch level, but this is simpler. """
-    max_l = max(len(x) for x in dataset["input_ids"])
-    for name in PADDED_INPUTS:
-        dataset[name] = [x + [padding if name != "lm_labels" else -100] * (max_l - len(x)) for x in dataset[name]]
-    return dataset
-
-def collate_batch_elements(batch, tokenizer, args):
-    """
-    Topical chats is a ridiculously large dataset (2GB+ including facts/reading set).
-    Maintaining an entire tensor dataset in memory is a terrible idea
-    since *every* input is padded to the size of the largest element.
-    The training dataset has 179k instances, so imagine padding all
-    of those to max_length (RIP RAM!)
-
-    Another point to note is that the actual number of instances per batch in this
-    implementation is num_candidates*batch_size. I haven't thought about how to
-    optimize this but I guess it'll take a bit more effort
-    - Rishi
-
-    """
-    batch_inputs = defaultdict(list)
-    chained_batch = chain(*batch)
-
-    for instance in chained_batch:
-        for field, data in instance.items():
-            batch_inputs[field].append(data)
-
-    padded_dataset = pad_dataset(batch_inputs, padding=tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS[-1]))
-
-    tensorized_input = []
-    # Verify input sent the same way:
-    #
-    # "input_ids": [Batch size, num_cands, seq_len]
-    # "mc_token_ids": [Batch size, num cands],
-    # "lm_labels": [batch size, num_cands, seq_len]
-    # "mc_labels": [batch_size]
-    # "token_type_ids": [batch_size, num_cands, seq_len]
-
-    batch_size = tuple([len(batch_inputs[MODEL_INPUTS[0]])//args.num_candidates])
-    for input_name in MODEL_INPUTS:
-        tensor = torch.tensor(padded_dataset[input_name])
-
-        if input_name != "mc_labels":
-            tensor = tensor.view((-1, args.num_candidates) + tensor.shape[1:])
-        else:
-            tensor = torch.ones(size=batch_size, dtype=torch.long) * (args.num_candidates - 1)
-        tensorized_input.append(tensor)
-    return tensorized_input
+CACHED_DISCRIMINATOR = {
+    "athena": "taggers/checkpoints/pplm_clf_1.pt"
+}
 
 def top_k_filter(logits, k, probs=False):
     """
@@ -156,33 +35,33 @@ def top_k_filter(logits, k, probs=False):
             return torch.where(logits < batch_mins, torch.ones_like(logits) * 0.0, logits)
         return torch.where(logits < batch_mins, torch.ones_like(logits) * -BIG_CONST, logits)
 
-def get_loader(args, tokenizer):
-    topical_chat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache, args.training_configuration)
-
-    splits = list(topical_chat.keys())
-    for split in splits:
-        if split != args.split:
-            del topical_chat[split]
-        # Free up memory from unneeded splits
-    dataset = TopicalChatsDataset(topical_chat[args.split], tokenizer, SPECIAL_TOKENS, args)
-    sampler = torch.utils.data.distributed.DistributedSampler(dataset) if args.distributed else None
-    loader = DataLoader(dataset, sampler=sampler, batch_size=args.valid_batch_size,
-                              collate_fn=lambda x: collate_batch_elements(x, tokenizer, args),
-                              shuffle=False)
-
-    return loader, sampler
-
-def perturb_past(past, model, last, unpert_past, unpert_logits, accumulated_hidden, grad_norms, stepsize, classifier,
-                 classifier_fields, class_label, num_iterations, horizon_length, window_length, decay, gamma, kl_scale,
-                 device, tokenizer):
-    special_tokens_ids = tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS)
-    grad_accumulator = [(np.zeros(p.shape).astype("float32")) for p in past]
+def perturb_past(
+    past,
+    model,
+    last,
+    unpert_past,
+    unpert_logits,
+    accumulated_hidden,
+    stepsize=0.02,
+    classifier=None,
+    class_label=None,
+    num_iterations=3,
+    horizon_length=1,
+    window_length=0,
+    decay=False,
+    gamma=1.5,
+    kl_scale=0.01,
+    device="cuda"
+):
+    # Delta(H_t)
+    grad_accumulator = [np.zeros(p.shape).astype("float32") for p in past]
 
     if accumulated_hidden is None:
         accumulated_hidden = 0
 
     if decay:
-        decay_mask = torch.arange(0.0, 1.0 + SMALL_CONST, 1.0 / (window_length))[1:]
+        # Discount weights from past
+        decay_mask = torch.arange(0.0, 1.0 + SMALL_CONST, 1.0 / (window_length)) [1:]
     else:
         decay_mask = 1.0
 
@@ -203,156 +82,126 @@ def perturb_past(past, model, last, unpert_past, unpert_logits, accumulated_hidd
     else:
         window_mask = torch.ones_like(past[0]).to(device)
 
-
-    loss_per_iter = []
+    # Store the loss per perturbation steps
+    loss_per_iteration = []
     new_accumulated_hidden = None
 
     for i in range(num_iterations):
-        print("Iteration", i + 1)
-        curr_perturbation = [torch.from_numpy(p_).requires_grad_(True).to(device=device) for p_ in grad_accumulator]
-        # make sure p_.grad is not None
+        print(f"Iteration {i + 1}")
+        # Delta(H_t)
+        curr_perturbation = [torch.from_numpy(p_).requires_grad_(True).to(device) for p_ in grad_accumulator]
+
         for p_ in curr_perturbation:
             p_.retain_grad()
 
-        # Compute hidden using perturbed past
+        # Compute the perturbed hidden value for the past states
         perturbed_past = list(map(add, past, curr_perturbation))
         _, _, _, curr_length, _ = curr_perturbation[0].shape
         all_logits, _, all_hidden = model(last, past=perturbed_past)
+        # Hidden state of last layer
         hidden = all_hidden[-1]
         new_accumulated_hidden = accumulated_hidden + torch.sum(hidden, dim=1).detach()
-        # TODO: Check the layer-norm consistency of this with trained discriminator (Sumanth)
+
         logits = all_logits[:, -1, :]
         probs = F.softmax(logits, dim=-1)
 
         loss = 0.0
-
         loss_list = []
 
-        # TODO:Compute loss for the current decoded sequence so far
+        # Compute discriminator loss
+        # TODO: Implement arbitrary parameter linking
+        ce_loss = torch.nn.CrossEntropyLoss()
         curr_unpert_past = unpert_past
         curr_probs = torch.unsqueeze(probs, dim=1)
         wte = model.resize_token_embeddings()
 
-        current_decoded_seq = []
         for _ in range(horizon_length):
             inputs_embeds = torch.matmul(curr_probs, wte.weight.data)
-            logits, curr_unpert_past, curr_all_hidden = model(past=curr_unpert_past, inputs_embeds=inputs_embeds)
-            logits = logits[0, -1, :] / args.temperature
-            logits = top_filtering(logits, top_k=0, top_p=0.9)
-            probs = F.softmax(logits, dim=-1)
-            prev = torch.multinomial(probs, 1)
+            _, curr_unpert_past, curr_all_hidden = model(past=curr_unpert_past, inputs_embeds=inputs_embeds)
+            curr_hidden = curr_all_hidden[-1]
+            new_accumulated_hidden = new_accumulated_hidden + torch.sum(curr_hidden, dim=1)
 
-            if prev.item() in special_tokens_ids:
-                while prev.item() in special_tokens_ids:
-                    if probs.max().item() == 1:
-                        # Disabled this rather noisy warning
-                        # logger.warn("Warning: model generating special token with probability 1.")
-                        break  # avoid infinitely looping over special token
-                    prev = torch.multinomial(probs, num_samples=1)
-            if prev.item() in special_tokens_ids:
-                break
-
-            current_decoded_seq.append(prev.item())
-
-        horizon_output = tokenizer.decode(current_decoded_seq)
-        tokens = nltk.word_tokenize(horizon_output)
-
-        if len(tokens) < 1:
-            tokens = [UNK]
-
-        conversation = [[tokens]]
-        print("Tokens: ", conversation)
-        print(classifier_fields["conversation"].process(conversation, device=device))
-        x, _len, utt_len = classifier_fields["conversation"].process(conversation, device=device)
-        preds, logits = classifier(x, utt_len)
-
-        logits = logits.squeeze(0)
-        label = torch.tensor(logits.shape[0] * [class_label], device=device, dtype=torch.long)
-        discrim_loss = CrossEntropyLoss()(logits, label)
-        print(" PPLM discrim loss:", discrim_loss.data.cpu().numpy())
-        #
+        _, prediction = classifier(new_accumulated_hidden / (curr_length + 1 + horizon_length))
+        label = torch.tensor(prediction.shape[0] * [class_label], device=device, dtype=torch.long)
+        discrim_loss = ce_loss(prediction, label)
 
         loss += discrim_loss
         loss_list.append(discrim_loss)
 
-        kl_loss = 0.0
+        # Compute KL-loss
 
-        if kl_scale > 0.0:
-            unpert_probs = F.softmax(unpert_logits[:, -1, :], dim=-1)
+        kl_loss = 0.
+        if kl_scale > 0.:
+            unpert_probs = F.softmax(unpert_logits[:, -1, :], dim=1)
+
+            # This is label smoothing where we set a lower bound on probabilities. This is probably inconsistent
             unpert_probs = unpert_probs + SMALL_CONST * (unpert_probs <= SMALL_CONST).float().to(device).detach()
             correction = SMALL_CONST * (probs <= SMALL_CONST).float().to(device).detach()
             corrected_probs = probs + correction.detach()
 
-            kl_loss = kl_scale *((corrected_probs * (corrected_probs/unpert_probs).log()).sum())
-            print(" kl_loss ", kl_loss.data.cpu().numpy())
+            kl_loss = kl_scale * ((corrected_probs * (corrected_probs/unpert_probs).log()).sum())
+            print(f"KL loss: {kl_loss.data.cpu().numpy()}")
             loss += kl_loss
 
-        loss_per_iter.append(loss.data.cpu().numpy())
-        print(" PPLM loss", (loss - kl_loss).data.cpu().numpy())
+        loss_per_iteration.append(loss.data.cpu().numpy())
+        print(f"PPLM loss: {(loss - kl_loss).data.cpu().numpy()}")
 
+        # Compute gradients
         loss.backward()
 
-        # TODO: Calculate gradient norms
-        if grad_norms is not None:
-            grad_norms = [
-                torch.max(grad_norms[index], torch.norm(p_.grad * window_mask))
-                for index, p_ in enumerate(curr_perturbation)
-            ]
-        else:
-            grad_norms = [
-                (torch.norm(p_.grad * window_mask) + SMALL_CONST) for index, p_ in enumerate(curr_perturbation)
-            ]
-        # Normalize gradients
+        # Calculate norm of gradient of delta(H_t)
+        grad_norms = [
+            (torch.norm(p_.grad * window_mask) + SMALL_CONST) for index, p_ in enumerate(curr_perturbation)
+        ]
+
+        # normalize gradient for delta(H_t)
         grad = [
-            -stepsize * (p_.grad * window_mask / grad_norms[index]**gamma).data.cpu().numpy()
+            -stepsize * (p_.grad * window_mask / grad_norms[index] ** gamma).data.cpu().numpy()
             for index, p_ in enumerate(curr_perturbation)
         ]
 
         grad_accumulator = list(map(add, grad, grad_accumulator))
 
-        # Reset gradients
+        # Zero the gradients
         for p_ in curr_perturbation:
             p_.grad.data.zero_()
 
-        # removing past from the graph
         new_past = []
-
         for p_ in past:
             new_past.append(p_.detach())
         past = new_past
 
-    grad_accumulator = [torch.from_numpy(p_).requires_grad_(True).to(device=device) for p_ in grad_accumulator]
-    pert_past = list(map(add, past, grad_accumulator))
+    # Apply the accumulated perturbations to the past
+    grad_accumulator = [torch.from_numpy(p_).requires_grad_(True).to(device) for p_ in grad_accumulator]
+    # H^{hat}_t = H_t + Delta(H_t)
+    perturbed_past = list(map(add, past, grad_accumulator))
 
-    return pert_past, new_accumulated_hidden, grad_norms, loss_per_iter
+    return perturbed_past, new_accumulated_hidden, grad_norms, loss_per_iteration
 
-def generate_text_pplm(model, tokenizer,
-                       context=None,
-                       device="cuda",
-                       perturb=True,
-                       classifier=None,
-                       classifier_fields=None,
-                       class_label=None,
-                       length=100,
-                       stepsize=0.02,
-                       temperature=1.0,
-                       top_k=10,
-                       sample=False,
-                       num_iterations=3,
-                       grad_length=10000,
-                       horizon_length=1,
-                       window_length=0,
-                       decay=False,
-                       gamma=1.5,
-                       gm_scale=0.9,
-                       kl_scale=0.01,
-                       repetition_penalty=1.0):
+def generate_text(
+        model,
+        tokenizer,
+        context,
+        device,
+        length,
+        perturb,
+
+        classifier=None,
+        class_label=None,
+):
     past = None
     output_so_far = None
+    grad_length = 10000
+    num_iterations = 3
+    current_stepsize = stepsize = 0.02
+    temperature = 1.0
+    repetition_penalty = 1.0
+    gm_scale = 0.9
+    sample = True
+    top_k = 10
 
     if context:
         context_t = torch.tensor(context, device=device, dtype=torch.long)
-
         while len(context_t.shape) < 2:
             context_t = context_t.unsqueeze(0)
         output_so_far = context_t
@@ -361,296 +210,221 @@ def generate_text_pplm(model, tokenizer,
     last = None
     unpert_discrim_loss = 0
     loss_in_time = []
-
     for i in trange(length, ascii=True):
 
-        # Get past/probs for current output, except for last word
-        # GPT takes 2 inputs: past + current token
+        # Get the past for the current output except for the last word
 
-        # Run model forward to obtain unperturbed
+        # run the forward pass to get the past information
         if past is None and output_so_far is not None:
             last = output_so_far[:, -1:]
-
             if output_so_far.shape[1] > 1:
                 _, past, _ = model(output_so_far[:, :-1])
 
         unpert_logits, unpert_past, unpert_all_hidden = model(output_so_far)
         unpert_last_hidden = unpert_all_hidden[-1]
 
-        # Check if we're above grad max length
         if i >= grad_length:
-            current_stepsize = stepsize * 0
-        else:
-            current_stepsize = stepsize
+            current_stepsize = 0
 
-        # Modify the past if necessary
+        # Update the past
         if not perturb or num_iterations == 0:
-            pert_past = past
+            perturbed_past = past
         else:
             accumulated_hidden = unpert_last_hidden[:, :-1, :]
             accumulated_hidden = torch.sum(accumulated_hidden, dim=1)
 
             if past is not None:
-                pert_past, _, grad_norms, loss_this_iter = perturb_past(
-                    past,
-                    model,
-                    last,
-                    unpert_past=unpert_past,
-                    unpert_logits=unpert_logits,
-                    accumulated_hidden=accumulated_hidden,
-                    grad_norms=grad_norms,
-                    stepsize=current_stepsize,
+                perturbed_past, _, grad_norms, loss_this_iter = perturb_past(
+                    past=past,
+                    model=model,
+                    last=last,
                     classifier=classifier,
-                    classifier_fields=classifier_fields,
                     class_label=class_label,
-                    num_iterations=num_iterations,
-                    horizon_length=horizon_length,
-                    window_length=window_length,
-                    decay=decay,
-                    gamma=gamma,
-                    kl_scale=kl_scale,
-                    device=device,
-                    tokenizer=tokenizer
-                )
+                    accumulated_hidden=accumulated_hidden,
+                    unpert_past=unpert_past,
+                    unpert_logits=unpert_logits
+                )  # Perform past perturbation using discriminator loss
 
                 loss_in_time.append(loss_this_iter)
             else:
-                pert_past = past
+                perturbed_past = past
 
-        pert_logits, past, pert_all_hidden = model(last, past=pert_past)
-        pert_logits = pert_logits[:, -1, :] / temperature
+        # Obtained the perturbed state info
+        # o^{hat}_{t+1}, past, H^{hat}_{t+1} = LM(x_t, H^{hat}_{t}) as described in section 3.2
+        pert_logits, past, pert_all_hidden = model(last, past=perturbed_past)
+        pert_logits = pert_logits[:, -1, :] / temperature  # Reshape distribution
 
-        for token_idx in set(output_so_far[0].tolist()):
-            if pert_logits[0, token_idx] < 0:
-                pert_logits[0, token_idx] *= repetition_penalty
+        # Bias against repetition
+        for token_index in set(output_so_far[0].tolist()):
+            if pert_logits[0, token_index] < 0:
+                pert_logits[0, token_index] *= repetition_penalty
             else:
-                pert_logits[0, token_idx] /= repetition_penalty
+                pert_logits[0, token_index] /= repetition_penalty
 
         pert_probs = F.softmax(pert_logits, dim=-1)
 
-        # TODO: Fill this in
-        if classifier is not None:
-            pass
-            # Compute loss of predicted dialog act
-            # this is done by converting the decoded output into a field
-        else:
-            unpert_discrim_loss = 0
+        # Get discriminator loss
 
+        ce_loss = torch.nn.CrossEntropyLoss()
+        _, prediction = classifier(torch.mean(unpert_last_hidden, dim=1))
+        label = torch.tensor([class_label], device=device, dtype=torch.long)
+        unpert_discrim_loss = ce_loss(prediction, label)
+        print("Unperturbed discrim loss", unpert_discrim_loss.data.cpu().numpy())
+
+        # Perform post-norm Geometric-Mean fusion as described in Section 3.3
         if perturb:
-
-            unpert_probs = F.softmax(unpert_logits[:, -1, :], dim=1)
+            unpert_probs = F.softmax(unpert_logits[:, -1, :], dim=-1)
 
             pert_probs = (pert_probs ** gm_scale) * (unpert_probs ** (1 - gm_scale))
             pert_probs = top_k_filter(pert_probs, k=top_k, probs=True)
 
-            # Rescale
             if torch.sum(pert_probs) <= 1:
                 pert_probs = pert_probs / torch.sum(pert_probs)
         else:
             pert_logits = top_k_filter(pert_logits, k=top_k)
             pert_probs = F.softmax(pert_logits, dim=-1)
 
+        # Sample from top-k or perform MLE decoding
         if sample:
             last = torch.multinomial(pert_probs, num_samples=1)
-
         else:
             _, last = torch.topk(pert_probs, k=1, dim=-1)
 
-        # update context/output_so_far appending the new token
+        # Update the output obtained so far
         output_so_far = last if output_so_far is None else torch.cat((output_so_far, last), dim=1)
-
         print(tokenizer.decode(output_so_far.tolist()[0]))
 
     return output_so_far, unpert_discrim_loss, loss_in_time
 
-def full_text_generation(model, tokenizer, context, device, num_samples, discrim, discrim_fields, class_label, length,
-                         stepsize, temperature, top_k, sample, num_iterations, grad_length, horizon_length,
-                         window_length, decay, gamma, gm_scale, kl_scale, repetition_penalty):
+def run_full_text_generation(
+    model,
+    tokenizer,
+    context,
+    num_samples,
+    classifier,
+    class_label,
+    device="cpu"
 
-    unpert_gen_tok_text, _, _ = generate_text_pplm(
-        model=model,
-        tokenizer=tokenizer,
-        context=context,
+):
+    length = 10
+    unperturbed_generated_tokens, _, _ = generate_text(
+        model,
+        tokenizer,
+        context,
         device=device,
         length=length,
-        sample=sample,
         perturb=False,
-        repetition_penalty=repetition_penalty
+        classifier=classifier,
+        class_label=class_label
     )
 
-    if device == "cuda":
-        torch.cuda.empty_cache()
-
-    pert_gen_tok_texts = []
-    discrim_losses = []
+    perturbed_generated_token_samples = []
+    discriminator_losses = []
     losses_in_time = []
-
     for i in range(num_samples):
-        pert_gen_tok_text, discrim_loss, loss_in_time = generate_text_pplm(
-            model=model,
-            tokenizer=tokenizer,
-            context=context,
+        perturbed_generated_tokens, discriminator_loss, loss_in_time = generate_text(
+            model,
+            tokenizer,
+            context,
             device=device,
-            perturb=True,
-            classifier=discrim,
-            classifier_fields=discrim_fields,
-            class_label=class_label,
             length=length,
-            stepsize=stepsize,
-            temperature=temperature,
-            top_k=top_k,
-            sample=sample,
-            num_iterations=num_iterations,
-            grad_length=grad_length,
-            horizon_length=horizon_length,
-            window_length=window_length,
-            decay=decay,
-            gamma=gamma,
-            gm_scale=gm_scale,
-            kl_scale=kl_scale,
-            repetition_penalty=repetition_penalty
+            perturb=True,
+            classifier=classifier,
+            class_label=class_label
         )
-        pert_gen_tok_texts.append(pert_gen_tok_text)
-        if discrim is not None:
-            discrim_losses.append(discrim_loss.data.cpu().numpy())
-        losses_in_time.append(losses_in_time)
 
-    if device == "cuda":
-        torch.cuda.empty_cache()
+        perturbed_generated_token_samples.append(perturbed_generated_token_samples)
+        discriminator_losses.append(discriminator_loss)
 
-    return unpert_gen_tok_text, pert_gen_tok_texts, discrim_losses, losses_in_time
+        losses_in_time.append(loss_in_time)
 
 
-def run_pplm_da(args):
+    return unperturbed_generated_tokens, perturbed_generated_token_samples, discriminator_losses, losses_in_time
 
-    # Load discriminator model
-    discriminator, fields = load_discriminator(args)
 
-    # Load GPT2 model
-    data = torch.load(args.model_checkpoint + '/pytorch_model.bin')
-    model = data["mymodel"]
 
-    model = GPT2LMHeadModel.from_pretrained(args.model_checkpoint, output_hidden_states=True, state_dict=model.state_dict())
-    # model.to(args.device)
-    # model.eval()
 
-    tokenizer = GPT2Tokenizer.from_pretrained(args.model_checkpoint)
+def run_planned_pplm_examples(
+        pretrained_model_checkpoint,
+        cond_text,
+        class_label,
+        device
+):
+    num_samples = 30
+    with open('taggers/checkpoints/pplm_config.pkl', 'rb') as pplm_training_config_file:
+        training_config = pickle.load(pplm_training_config_file)
 
-    # Freeze GPT2 weights
+    vocab = training_config["vocab"]
+    print(vocab.itos)
+    discriminator = PPLMGPT2Classifier(num_labels=len(vocab), pretrained_model=pretrained_model_checkpoint, cached_mode=True,
+                                       device=device)
+
+    state_dict = torch.load(CACHED_DISCRIMINATOR["athena"])
+    discriminator.load_state_dict(state_dict)
+
+    discriminator.to(device)
+    discriminator.eval()
+
+    model = GPT2LMHeadModel.from_pretrained(pretrained_model_checkpoint,
+                                            output_hidden_states=True)
+
+    model.to(device)
+    model.eval()
+
+    tokenizer = GPT2Tokenizer.from_pretrained(pretrained_model_checkpoint)
+
+    # Freeze model weights
     for param in model.parameters():
         param.requires_grad = False
 
-    loader, sampler = get_loader(args, tokenizer)
+    uncond = len(cond_text) == 0
+    if uncond:
+        tokenized_cond_text = tokenizer.encode(tokenizer.bos_token)
+    else:
+        tokenized_cond_text = tokenizer.encode(tokenizer.bos_token + cond_text)
 
-    for i, batch in tqdm(enumerate(loader)):
-        input_ids, mc_token_ids, lm_labels, mc_labels, token_type_ids = batch
+    print("== Prefix of sentence ==")
+    print(tokenizer.decode(tokenized_cond_text))
+    print()
 
-        for j in range(len(input_ids)):
-            input_seq = tokenizer.decode(input_ids[j][0])
-            print(input_seq)
-            prefix, suffix = input_seq.rsplit("<speaker", maxsplit=1)
-            context = prefix + "<speaker" + suffix[:2]  # Hacky way to append the speaker tag
+    unperturbed_generated_tokens, perturbed_generated_tokens_samples, _ , _ = run_full_text_generation(
+        model,
+        tokenizer,
+        tokenized_cond_text,
+        num_samples,
+        discriminator,
+        class_label=class_label,
+        device=device
+    )
 
-            tokenized_cond_text = tokenizer.encode(context)
+    unperturbed_generated_text = tokenizer.decode(unperturbed_generated_tokens.tolist()[0])
+    print("= Unperturbed generated text =")
+    print(unperturbed_generated_text)
+    print()
 
-            logger.info("= Prefix of sentence = ")
-            logger.info(f"{context}\n")
+    generated_texts = []
 
-            unpert_gen_tok_text, pert_gen_tok_texts, _, _ = full_text_generation(
-                model=model,
-                tokenizer=tokenizer,
-                context=tokenized_cond_text,
-                device=args.device,
-                num_samples=1,
-                discrim=discriminator,
-                discrim_fields=fields,
-                class_label=args.class_label,
-                length=args.length,
-                stepsize=args.stepsize,
-                temperature=args.temperature,
-                top_k=args.top_k,
-                sample=args.sample,
-                num_iterations=args.num_iterations,
-                grad_length=args.grad_length,
-                horizon_length= args.horizon_length,
-                window_length = args.window_length,
-                decay=args.decay,
-                gamma=args.gamma,
-                gm_scale = args.gm_scale,
-                kl_scale=args.kl_scale,
-                repetition_penalty=args.repetition_penalty
-            )
+    for i, perturbed_generated_tokens in enumerate(perturbed_generated_tokens_samples):
+        perturbed_generated_text = tokenizer.decode(perturbed_generated_tokens.tolist()[0])
+        print(f"= Perturbed generated text {i + 1}= ")
 
-            logger.info("= Unperturbed generated text")
-            logger.info(unpert_gen_tok_text)
-
-            for i, pert_gen_tok_text in enumerate(pert_gen_tok_texts):
-                try:
-                    logger.info(f"= Perturbed generated text {i + 1} =")
-                    logger.info(pert_gen_tok_text)
-                except Exception as exc:
-                    logger.info(f"Random error {exc}")
-
+        generated_texts.append(perturbed_generated_text)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-
-    # LM args
-    parser.add_argument("--dataset_path", type=str, default="processed_output",
-                        help="Path or url of the dataset. If empty download from S3.")
-    parser.add_argument('--training_configuration', type=str, default="baseline",
-                        help="Training configuration to make use of")
-    parser.add_argument('--dataset_cache', type=str, default='./dataset_cache', help='Path or url of the dataset cache')
-
-    parser.add_argument('--model_checkpoint',
-                        default="gpt2-medium",
-                        help="Pretrained model name or path to model checkpoint")
-    parser.add_argument('--max_history', type=int, default=2, help='Number of previous exchanges to keep in history')
-    parser.add_argument('--max_fact_length', type=int, default=200,
-                        help='Number of fact tokens to include in the input')
-    parser.add_argument('--valid_batch_size', type=int, default=4,
-                        help='Batch size for generating outputs')
-    parser.add_argument('--length', type=int,
-                        default=50,
-                        help='Max length for the decoded utterance')
-    parser.add_argument("--num_candidates", type=int, default=1, help="Number of candidates for training")
-    parser.add_argument('--split', type=str, default="valid_freq", help="Split to generate outputs for")
-    parser.add_argument("--local_rank", type=int, default=-1,
-                        help="Local rank for distributed training (-1: not distributed)")
-    # Discriminator args
-    parser.add_argument('--class_label', type=int,
-                        default=1,
-                        help='Label of class to condition on')
-
-    # PPLM args
-    parser.add_argument("--stepsize", type=float, default=0.02)
-    parser.add_argument("--temperature", type=float, default=1.0)
-    parser.add_argument("--top_k", type=int, default=10)
-    parser.add_argument("--sample", action="store_true", help="Generate from end-of-text as prefix")
-    parser.add_argument("--num_iterations", type=int, default=3)
-    parser.add_argument("--grad_length", type=int, default=10000)
-    parser.add_argument(
-        "--window_length",
-        type=int,
-        default=0,
-        help="Length of past which is being optimized; 0 corresponds to infinite window length",
-    )
-    parser.add_argument(
-        "--horizon_length", type=int, default=1, help="Length of future to optimize over",
-    )
-    parser.add_argument("--decay", action="store_true", help="whether to decay or not")
-    parser.add_argument("--gamma", type=float, default=1.5)
-    parser.add_argument("--gm_scale", type=float, default=0.9)
-    parser.add_argument("--kl_scale", type=float, default=0.01)
-    parser.add_argument(
-        "--repetition_penalty", type=float, default=1.0, help="Penalize repetition. More than 1.0 -> less repetition",
-    )
-
-    parser.add_argument('--device', type=str, default='cuda' if torch.cuda.is_available() else "cpu",
-                        choices=['cpu', 'cuda'],
-                        help='Device to run on. Defaults to CUDA if available')
-
+    parser.add_argument('--pretrained_model_checkpoint',
+                        type=str,
+                        default='gpt2-medium',
+                        help='Pretrained model name')
+    parser.add_argument('--cond_text',
+                        type=str,
+                        default='the book')
+    parser.add_argument('--device',
+                        type=str,
+                        default=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+    parser.add_argument('--class_label', type=int, default=1,
+                        help="Index of the class to predict")
     args = parser.parse_args()
-    args.distributed = (args.local_rank != -1)
-    run_pplm_da(args)
+
+    run_planned_pplm_examples(**vars(args))
