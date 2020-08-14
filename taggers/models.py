@@ -105,6 +105,60 @@ class GPT2Classifier(nn.Module):
         return predictions
 
 
+class PPLMGPT2Classifier(nn.Module):
+    """
+    A version of a classifier that performs classification
+    based on the average representation as described in Dathathri et al. 2020
+    """
+    def __init__(
+            self,
+            num_labels,
+            pretrained_model='microsoft/DialoGPT-medium',
+            cached_mode=False,
+            device="cpu"
+    ):
+        super(PPLMGPT2Classifier, self).__init__()
+
+        self.tokenizer = GPT2Tokenizer.from_pretrained(pretrained_model)
+        self.tokenizer.pad_token = self.tokenizer.eos_token
+        self.transformer = GPT2Model.from_pretrained(pretrained_model)
+        self.transformer.to(device)
+        # Freeze transformer parameters to train only classification head
+        for param in self.transformer.parameters():
+            param.requires_grad = False
+
+        self.embed_size = self.transformer.config.hidden_size
+
+        self.linear = nn.Linear(self.embed_size, num_labels)
+        self.linear.to(device)
+        self.cached_mode = cached_mode
+        self.device = device
+
+        self.ce_loss = nn.CrossEntropyLoss()
+
+
+    def _avg_representation(self, x):
+        mask = x.ne(0).unsqueeze(2).repeat(1, 1, self.embed_size).float().to(self.device).detach()
+        hidden, _ = self.transformer(x)
+        masked_hidden = hidden * mask
+        avg_hidden = torch.sum(masked_hidden, dim=1) / (torch.sum(mask, dim=1).detach() + 1e-12)
+
+        return avg_hidden
+
+    def forward(self, x, labels=None):
+        if self.cached_mode:
+            avg_hidden = x.to(self.device)
+        else:
+            inp_dict = self.tokenizer.batch_encode_plus(x,
+                                                        pad_to_max_length=True,
+                                                        return_tensors="pt")
+            x = inp_dict['input_ids'].to(self.device)
+            avg_hidden = self._avg_representation(x)
+
+        logits = self.linear(avg_hidden)
+        loss = self.ce_loss(logits, labels.to(self.device)) if labels is not None else None
+        return loss, logits
+
 class InferSentCRFTagger(nn.Module):
     def __init__(self, num_labels, model_path, w2v_path, infersent_params,
                  utterance_encoder_hidden_size,

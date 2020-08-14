@@ -11,7 +11,7 @@ from torch.nn import CrossEntropyLoss
 from tqdm import tqdm
 from transformers import AdamW
 
-from taggers.models import InferSentClassifier, GPT2Classifier
+from taggers.models import InferSentClassifier, GPT2Classifier, PPLMGPT2Classifier
 from taggers.dataset import AthenaDaDataset
 from sklearn.model_selection import train_test_split
 from torch.utils.data.dataloader import DataLoader
@@ -21,8 +21,7 @@ from train_util.metrics import RunningMetric, MetricLambda, RunningLambdaMetric
 
 
 def load_json_data(filename, skip_labels=[]):
-    data_dir = 'taggers/data'
-    file_path = os.path.join(data_dir, filename)
+    file_path = os.path.join(filename)
 
     with open(file_path, 'r') as all_json_file:
         label_utt_dict = json.load(all_json_file)
@@ -161,6 +160,30 @@ def train_infersent_model(args):
     train_loop(model, optimizer, (train_loader, valid_loader), train.vocab, args)
 
 def train_gpt2model(args):
+    train, valid = load_athena_dataset(args)
+
+    model = GPT2Classifier(train.num_labels(), args.model_checkpoint, joint_train=args.joint_train, device=args.device)
+
+    model.to(args.device)
+
+    train_loader = DataLoader(train, batch_size=args.batch_size, collate_fn=prepare_batch)
+    valid_loader = DataLoader(valid, batch_size=args.batch_size, collate_fn=prepare_batch, shuffle=False)
+    optimizer = AdamW(model.parameters(), lr=args.lr)
+
+    train_loop(model, optimizer, (train_loader, valid_loader), train.vocab, args)
+
+def train_pplm_tagger(args):
+    train, valid = load_athena_dataset(args)
+
+    model = PPLMGPT2Classifier(num_labels=train.num_labels(), pretrained_model=args.model_checkpoint, device=args.device)
+    train_loader = DataLoader(train, batch_size=args.batch_size, collate_fn=prepare_batch)
+    valid_loader = DataLoader(valid, batch_size=args.batch_size, collate_fn=prepare_batch, shuffle=False)
+    optimizer = AdamW(model.parameters(), lr=args.lr)
+
+    train_loop(model, optimizer, (train_loader, valid_loader), train.vocab, args)
+
+
+def load_athena_dataset(args):
     skip_labels = [
         "device",
         "nonsense",
@@ -174,27 +197,15 @@ def train_gpt2model(args):
         "stop-intent",
         "hold"
     ]
-
-    df = load_json_data(filename='all_augmented.json', skip_labels=skip_labels)
+    df = load_json_data(filename=os.path.join(args.data_path, 'all_augmented.json'), skip_labels=skip_labels)
     train_df, valid_df = train_test_split(df, test_size=0.3, stratify=df['label'])
-
     train, valid = AthenaDaDataset(train_df), AthenaDaDataset(valid_df)
-
-    model = GPT2Classifier(train.num_labels(), args.model_checkpoint, joint_train=args.joint_train, device=args.device)
-
-    model.to(args.device)
-
-    train_loader = DataLoader(train, batch_size=args.batch_size, collate_fn=prepare_batch)
-    valid_loader = DataLoader(valid, batch_size=args.batch_size, collate_fn=prepare_batch, shuffle=False)
-    optimizer = AdamW(model.parameters(), lr=args.lr)
-
-    train_loop(model, optimizer, (train_loader, valid_loader), train.vocab, args)
-
+    return train, valid
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', default="infersent",
-                        choices=['infersent', 'gpt2'])
+                        choices=['infersent', 'gpt2', 'pplm'])
     parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--gradient_accumulation_steps', type=int, default=4)
@@ -209,10 +220,14 @@ if __name__ == '__main__':
     parser.add_argument('--infersent_w2v_path', default='taggers/fastText/crawl-300d-2M.vec')
 
     parser.add_argument('--model_checkpoint', default="microsoft/DialoGPT-medium")
+    parser.add_argument('--data_path', default='taggers/data',
+                        help='Base path for the stored Athena dialog act data')
 
     args = parser.parse_args()
 
     if args.model == "gpt2":
         train_gpt2model(args)
+    elif args.model == "pplm":
+        train_pplm_tagger(args)
     else:
         train_infersent_model(args)
