@@ -180,6 +180,11 @@ def train_pplm_tagger(args):
     valid_loader = DataLoader(valid, batch_size=args.batch_size, collate_fn=prepare_batch, shuffle=False)
     optimizer = AdamW(model.parameters(), lr=args.lr)
 
+    with open('taggers/checkpoints/pplm_config.pkl', 'wb') as pplm_training_config_file:
+        pickle.dump({
+            "vocab": train.vocab,
+        }, pplm_training_config_file)
+
     train_loop(model, optimizer, (train_loader, valid_loader), train.vocab, args)
 
 
