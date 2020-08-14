@@ -10,7 +10,7 @@ from tqdm.auto import tqdm
 from transformers import OpenAIGPTTokenizer, GPT2Tokenizer, OpenAIGPTDoubleHeadsModel
 
 from gpt2 import GPT2DoubleHeadsModel
-from tc_dataset import TopicalChatsDataset, TopicalChatsKDDataset, TopicalChatsSWBDDataset
+from tc_dataset import TopicalChatsDataset, TopicalChatsKDDataset, TopicalChatsSWBDDataset, TopicalChatsSentimentDataset
 from train_util.decode import top_filtering
 from utils import get_dataset, augmented_tc_dataset
 import torch.nn.functional as F
@@ -160,6 +160,8 @@ def get_loader(args, tokenizer):
     elif args.training_configuration == "kd-pd-nrg-swbd":
         dataset = TopicalChatsSWBDDataset(topical_chat[args.split], tokenizer, SPECIAL_TOKENS, args,
                                           inference=args.heuristic_policy)
+    elif args.training_configuration == "sentiment":
+        dataset = TopicalChatsSentimentDataset(topical_chat[args.split], tokenizer, SPECIAL_TOKENS, args)
     else:
         dataset = TopicalChatsKDDataset(topical_chat[args.split], tokenizer, SPECIAL_TOKENS, args,
                                         inference=args.heuristic_policy)  # Enable heuristic dialog policy
@@ -247,9 +249,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset_path", type=str, default="processed_output",
                         help="Path or url of the dataset. If empty download from S3.")
-    parser.add_argument('--training_configuration', type=str, default="baseline",
+    parser.add_argument('--training_configuration', type=str, default="sentiment",
                         help="Training configuration to run",
-                        choices=["baseline", "kd-pd-nrg", "kd-pd-nrg-swbd"])
+                        choices=["baseline", "kd-pd-nrg", "kd-pd-nrg-swbd", "sentiment"])
     parser.add_argument('--dataset_configuration', type=str, default="topical-chats",
                         help="Configuration of dataset to load for training",
                         choices=["dstc9", "topical-chats"])
