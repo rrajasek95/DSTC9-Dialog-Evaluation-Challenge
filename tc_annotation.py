@@ -84,7 +84,7 @@ def perform_vader_annotation(args):
 
         annotated_split = vader_annotate(tagger, split_data)
 
-        with open(os.path.join(data_dir, split + '_anno_vader.json'), 'w') as annotated_file:
+        with open(os.path.join(data_dir, split + '_anno_vader_arg_max.json'), 'w') as annotated_file:
             json.dump(annotated_split, annotated_file)
 
 
@@ -411,7 +411,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     # perform_athena_da_annotation(args)
     # merge_all_annotations(args)
-    # perform_vader_annotation(args)
+    perform_vader_annotation(args)
 
     # perform_spotlight_anno(args)
     # try:
@@ -420,4 +420,4 @@ if __name__ == '__main__':
     #     # Lazy hacky way to perform flair annotation on existing data
     #     annotate_fresh_tc_data(args)
     #     perform_flair_enhanced_anno(args)
-    perform_length_binning_anno(args)
+    # perform_length_binning_anno(args)
