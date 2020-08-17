@@ -62,7 +62,14 @@ def vader_annotate(tagger, split_data):
     return split_data
 
 
-def perform_vader_annotation(args):
+def vader_annotate_turn(tagger, split_data):
+    for conv_id, dialog_data in tqdm(split_data.items()):
+        for turn in dialog_data["content"]:
+            turn["sentiment_vader_turn"] = tagger.extract_sentiment(turn["message"])
+    return split_data
+
+
+def perform_vader_annotation(args, turn_anno=True):
     data_dir = os.path.join(
         args.data_dir,
         'tc_processed'
@@ -79,12 +86,14 @@ def perform_vader_annotation(args):
     tagger = VaderSentimentTagger()
 
     for split in splits:
-        with open(os.path.join(data_dir, split + '_anno_switchboard.json'), 'r') as data_file:
+        with open(os.path.join(data_dir, 'new_swbd_training_data', split + '_full_anno.json'), 'r') as data_file:
             split_data = json.load(data_file)
 
-        annotated_split = vader_annotate(tagger, split_data)
-
-        with open(os.path.join(data_dir, split + '_anno_vader_arg_max.json'), 'w') as annotated_file:
+        if turn_anno:
+            annotated_split = vader_annotate_turn(tagger, split_data)
+        else:
+            annotated_split = vader_annotate(tagger, split_data)
+        with open(os.path.join(data_dir, "new_vader_anno_turn", split + '_anno_vader_arg_max_turn.json'), 'w') as annotated_file:
             json.dump(annotated_split, annotated_file)
 
 
@@ -411,7 +420,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     # perform_athena_da_annotation(args)
     # merge_all_annotations(args)
-    perform_vader_annotation(args)
+    perform_vader_annotation(args, True)
 
     # perform_spotlight_anno(args)
     # try:
