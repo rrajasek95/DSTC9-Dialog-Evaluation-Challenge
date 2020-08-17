@@ -197,7 +197,7 @@ class USRMetric(ReferenceFreeMetric):
     """
     def _make_scoring_file(self, context_file, hypothesis_file):
 
-        scratch_path = 'submissions/scratch'
+        scratch_path = '../submissions/scratch'
         with open(context_file, 'r') as context_, open(hypothesis_file, 'r') as hypothesis_, open(scratch_path, 'w') as scratch_file:
             context_lines = [line.strip() for line in context_]
             hypothesis_lines = [line.strip() for line in hypothesis_]
@@ -217,7 +217,7 @@ class USRMetric(ReferenceFreeMetric):
 
         X = np.array([mlm_score, mlm_score, dr_c_scores, dr_c_scores, dr_f_scores]).T
 
-        with open('usr/examples/regr.pkl', 'rb') as regression_model_file:
+        with open('../usr/examples/regr.pkl', 'rb') as regression_model_file:
             model = pickle.load(regression_model_file)
         y = model.predict(X)
 
@@ -266,12 +266,12 @@ class USRMetric(ReferenceFreeMetric):
         return args
 
     def _compute_dr_c_score(self, scoring_file):
-        args = self.make_args("usr/examples/ctx", scoring_file)
+        args = self.make_args("../usr/examples/ctx", scoring_file)
         preds = self._compute_dr_score(args)
         return preds
 
     def _compute_dr_f_score(self, scoring_file):
-        args = self.make_args("usr/examples/uk", scoring_file)
+        args = self.make_args("../usr/examples/uk", scoring_file)
         return self._compute_dr_score(args)
 
     def __init__(self, context_file, fact_file, hypothesis_file):
@@ -316,7 +316,7 @@ class USRMetric(ReferenceFreeMetric):
 
     def build_args(self, scoring_file):
         args = argparse.Namespace()
-        args.output_dir = 'usr/examples/roberta_ft'
+        args.output_dir = '../usr/examples/roberta_ft'
         args.model_type = 'roberta'
         args.train_data_file = scoring_file
         args.per_gpu_eval_batch_size = 1
@@ -349,7 +349,7 @@ class USRMetric(ReferenceFreeMetric):
         return sum(self.results) / len(self.results) if len(self.results) > 0 else 0
 
     def _make_dr_scoring_file(self, context_file, fact_file, hypothesis_file):
-        scratch_dir = 'submissions/'
+        scratch_dir = '../submissions/'
         scratch_path = scratch_dir + 'dev.tsv'
         with open(context_file, 'r') as ctx, open(fact_file, 'r') as fct, open(hypothesis_file) as resp, open(scratch_path, 'w') as scratch_file:
             contexts = [line.strip() for line in ctx]
