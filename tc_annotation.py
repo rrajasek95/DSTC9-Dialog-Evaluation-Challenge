@@ -249,6 +249,7 @@ def lengthbin_annotate(split_data):
                 length_bin_index = len(tokens) // 10
 
                 segment["length_bin"] = bins.get(length_bin_index, "L")
+                segment["num_tokens"] = len(tokens)
 
     return split_data
 
