@@ -405,7 +405,7 @@ def run_planned_pplm_examples(
     generated_texts = []
 
     for i, perturbed_generated_tokens in enumerate(perturbed_generated_tokens_samples):
-        perturbed_generated_text = tokenizer.decode(perturbed_generated_tokens.tolist()[0])
+        perturbed_generated_text = tokenizer.decode(perturbed_generated_tokens[0])
         print(f"= Perturbed generated text {i + 1}= ")
 
         generated_texts.append(perturbed_generated_text)
