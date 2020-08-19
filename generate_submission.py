@@ -173,6 +173,44 @@ def get_loader(args, tokenizer):
 
     return loader, sampler, dataset
 
+def pad_sequences(second_input_ids, first_outputs, second_token_type, tokenizer):
+    max_len = -1
+    new_seq = []
+    new_token = []
+    padding = tokenizer.encode(SPECIAL_TOKENS[-1])[0]
+    eos = tokenizer.encode(SPECIAL_TOKENS[1])[0]
+    for i in range(len(second_input_ids)):
+        single_seq = []
+        single_token = []
+        for j in range(len(second_input_ids[i])):
+            eos_index = second_input_ids[i][j].index(eos)
+            if second_token_type[i][j][eos_index - 1] == tokenizer.encode("<speaker1>"):
+                single_seq.append(second_input_ids[i][j][:eos_index] +
+                                  tokenizer.encode("<speaker2>") + first_outputs[i] + [eos])
+                single_token.append(second_token_type[i][j][:eos_index] +
+                                    tokenizer.encode("<speaker2>") * (len(first_outputs[i])+1) + [eos])
+            else:
+                single_seq.append(second_input_ids[i][j][:eos_index] +
+                                  tokenizer.encode("<speaker1>") + first_outputs[i] + [eos])
+                single_token.append(second_token_type[i][j][:eos_index] +
+                                    tokenizer.encode("<speaker1>") * (len(first_outputs[i])+1) + [eos])
+            # 2: one for the speaker token and one to compensate the index of eos token to the length of the sequence
+            if eos_index + len(first_outputs[i]) + 2 > max_len:
+                max_len = eos_index + len(first_outputs[i]) + 2
+        # print(f"token {len(single_token[0])}  {tokenizer.decode(single_token[0])}")
+        # print(f"token {len(single_token[1])} {tokenizer.decode(single_token[1])}")
+        # print(f"seq {len(single_seq[0])} {tokenizer.decode(single_seq[0])}")
+        # print(f"seq {len(single_seq[1])} {tokenizer.decode(single_seq[1])}")
+        new_token.append(single_token)
+        new_seq.append(single_seq)
+    for i in range(len(second_input_ids)):
+        for j in range(len(second_input_ids[i])):
+            new_seq[i][j] = new_seq[i][j] + [padding] * (max_len - len(new_seq[i][j]))
+            new_token[i][j] = new_token[i][j] + [padding] * (max_len - len(new_token[i][j]))
+    return torch.LongTensor(new_seq), torch.LongTensor(new_token)
+
+
+
 def generate_submissions(args):
 
     tokenizer_class = GPT2Tokenizer
@@ -214,10 +252,22 @@ def generate_submissions(args):
             # batch = tuple(input_tensor.to(args.device) for input_tensor in batch)
 
             input_ids, mc_token_ids, lm_labels, mc_labels, token_type_ids, das_to_return = batch
-            if len(das_to_return) != len(input_ids):
-                print(len(all_das))
-                print(das_to_return)
-            outputs += decode_sequences(input_ids, token_type_ids, model, tokenizer, args)
+            if args.training_configuration == "kd-pd-nrg-swbd":
+                first_input_ids = torch.cat((input_ids[:, :, :2], input_ids[:, :, 3:]), 2)
+                first_token_type = torch.cat((token_type_ids[:, :, :2], token_type_ids[:, :, 3:]), 2)
+                second_input_ids = torch.cat((input_ids[:, :, :1], input_ids[:, :, 2:]), 2)
+                second_token_type = torch.cat((token_type_ids[:, :, :1], token_type_ids[:, :, 2:]), 2)
+                temp_outputs = decode_sequences(first_input_ids, first_token_type, model, tokenizer, args)
+                encoded_temp_outputs = [tokenizer.encode(each.replace("\n", "")) for each in temp_outputs]
+                padded_second_input, second_token_type = pad_sequences(second_input_ids.tolist(),
+                                                                encoded_temp_outputs,
+                                                                second_token_type.tolist(),
+                                                                tokenizer)
+                second_outputs = decode_sequences(padded_second_input, second_token_type, model, tokenizer, args)
+                all_outputs = [temp_outputs[i].replace("\n", "") + second_outputs[i] for i in range(len(second_outputs))]
+                outputs += all_outputs
+            else:
+                outputs += decode_sequences(input_ids, token_type_ids, model, tokenizer, args)
             for each in das_to_return:
                 all_das.append(each)
             if i % args.log_every_n == 0:
