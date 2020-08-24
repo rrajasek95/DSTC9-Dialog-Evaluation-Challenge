@@ -286,9 +286,6 @@ class TopicalChatsSWBDDataset(TopicalChatsDataset):
             lm_labels = bool(j == self.num_candidates - 1)
             instance = self.build_input_from_segments([], candidate, action_plan, self.tokenizer, lm_labels)
             instance['das_to_return'] = das_to_return
-            if len(das_to_return) == 0:
-                print(index)
-                print([self.tokenizer.decode([each for each in sentences]) for sentences in dialog_state['turn_history']])
             instances.append(instance)
 
         return instances
