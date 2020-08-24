@@ -284,7 +284,7 @@ class TopicalChatsSWBDDataset(TopicalChatsDataset):
         action_plan = encoded_das
         for j, candidate in enumerate(candidates):
             lm_labels = bool(j == self.num_candidates - 1)
-            instance = self.build_input_from_segments([], candidate, action_plan, self.tokenizer, lm_labels)
+            instance = self.build_input_from_segments(history, candidate, action_plan, self.tokenizer, lm_labels)
             instance['das_to_return'] = das_to_return
             instances.append(instance)
 
