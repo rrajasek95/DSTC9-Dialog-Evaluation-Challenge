@@ -109,6 +109,8 @@ def extract_fact_set_mapped(factsets):
 
 
 def process_split(dataset_path, split, tokenizer, index, knowledge_policy, sentiment=False):
+    infersent = None
+    bert_model = None
     if knowledge_policy == "infersent":
         infersent = load_infersent_model()
     elif knowledge_policy == "bert":
@@ -127,58 +129,70 @@ def process_split(dataset_path, split, tokenizer, index, knowledge_policy, senti
             agent_knowledge, agent_mapping = prepare_reading_set_for_conversation(conv_id, reading_set)
 
             for turn in conv_data["content"]:
-                # This is a highly approximate heuristic.
-                # Both Gopalakrishnan et al. 2019 and Hedayatnia et al. 2020
-                # acknowledge they don't have anything better for this issue
+
                 response = turn["message"]
 
                 available_knowledge = agent_knowledge[turn["agent"]]
-                for segment in turn["segments"]:
-                    sentence = segment["text"]
-                    if knowledge_policy == "tf_idf":
-                        text_tfidf = vec.transform([clean(sentence)])
-                        """
-                        In this section, we find the knowledge sentence that is closest
-                        to the ground truth response expected from the model.
-                        This is so that the model learns to appropriately condition on
-                        the knowledge
-                        """
-                        knowledge_tfidf = vec.transform(available_knowledge)
-
-                        similarities = linear_kernel(knowledge_tfidf, text_tfidf).flatten()
-                        closest_knowledge_index = similarities.argsort()[-1]
-
-                        if similarities[closest_knowledge_index] > 0.3:
-                            knowledge_sentence = available_knowledge[closest_knowledge_index]
-                            break
-                    elif knowledge_policy == "embeddings":
-                        knowledge_sentence = emb_knowledge_selection(conv_id, sentence, vec)
-                        break
-                    elif knowledge_policy == "bert":
-                        knowledge_sentence = bert_knowledge_selection(conv_id, sentence, vec, bert_model)
-                        break
-                    else:
-                        knowledge_sentence = infersent_knowledge_selection(conv_id, sentence, vec, infersent)
-                        break
-                else:
-                    if knowledge_policy == "tf_idf":
-                        text_tfidf = vec.transform([clean(response)])
-                        knowledge_tfidf = vec.transform(available_knowledge)
-                        similarities = linear_kernel(knowledge_tfidf, text_tfidf).flatten()
-                        closest_knowledge_index = similarities.argsort()[-1]
-
-                        knowledge_sentence = available_knowledge[closest_knowledge_index] \
-                            if similarities[closest_knowledge_index] > 0.3 else ""
-
-                original_knowledge_sentence = agent_mapping[turn["agent"]].get(knowledge_sentence, "")
-                if sentiment:
-                    current_turn_data = (tokenizer.encode(response), turn["sentiment_vader"], tokenizer.encode(original_knowledge_sentence))
-                else:
-                    current_turn_data = (tokenizer.encode(response), turn[dialog_act], tokenizer.encode(original_knowledge_sentence))
+                current_turn_data = prepare_turn_data(agent_mapping, available_knowledge, conv_id,
+                                                      dialog_act, knowledge_policy, response,
+                                                      tokenizer, turn, vec, bert_model, infersent, sentiment)
                 data.append((context, current_turn_data))
                 context = context + [current_turn_data]
 
     return data
+
+
+def prepare_turn_data(agent_mapping, available_knowledge, conv_id, dialog_act, knowledge_policy,
+                      response, tokenizer, turn, vec, bert_model=None, infersent=None, sentiment=None):
+    knowledge_sentence = ""
+    for segment in turn["segments"]:
+        sentence = segment["text"]
+        # With regards to knowledge selection, this is a highly approximate heuristic.
+        # Both Gopalakrishnan et al. 2019 and Hedayatnia et al. 2020
+        # acknowledge they don't have anything better for this issue
+
+        if knowledge_policy == "tf_idf":
+            text_tfidf = vec.transform([clean(sentence)])
+            """
+            In this section, we find the knowledge sentence that is closest
+            to the ground truth response expected from the model.
+            This is so that the model learns to appropriately condition on
+            the knowledge
+            """
+            knowledge_tfidf = vec.transform(available_knowledge)
+
+            similarities = linear_kernel(knowledge_tfidf, text_tfidf).flatten()
+            closest_knowledge_index = similarities.argsort()[-1]
+
+            if similarities[closest_knowledge_index] > 0.3:
+                knowledge_sentence = available_knowledge[closest_knowledge_index]
+                break
+        elif knowledge_policy == "embeddings":
+            knowledge_sentence = emb_knowledge_selection(conv_id, sentence, vec)
+            break
+        elif knowledge_policy == "bert":
+            knowledge_sentence = bert_knowledge_selection(conv_id, sentence, vec, bert_model)
+            break
+        else:
+            knowledge_sentence = infersent_knowledge_selection(conv_id, sentence, vec, infersent)
+            break
+    else:
+        if knowledge_policy == "tf_idf":
+            text_tfidf = vec.transform([clean(response)])
+            knowledge_tfidf = vec.transform(available_knowledge)
+            similarities = linear_kernel(knowledge_tfidf, text_tfidf).flatten()
+            closest_knowledge_index = similarities.argsort()[-1]
+
+            knowledge_sentence = available_knowledge[closest_knowledge_index] \
+                if similarities[closest_knowledge_index] > 0.3 else ""
+    original_knowledge_sentence = agent_mapping[turn["agent"]].get(knowledge_sentence, "")
+    if sentiment:
+        current_turn_data = (
+        tokenizer.encode(response), turn["sentiment_vader"], tokenizer.encode(original_knowledge_sentence))
+    else:
+        current_turn_data = (
+        tokenizer.encode(response), turn[dialog_act], tokenizer.encode(original_knowledge_sentence))
+    return current_turn_data
 
 
 def prepare_reading_set_for_conversation(conv_id, reading_set):
