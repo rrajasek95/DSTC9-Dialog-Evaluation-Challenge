@@ -139,7 +139,7 @@ def collate_batch_elements(batch, tokenizer, args):
                 tensor = torch.ones(size=batch_size, dtype=torch.long) * (args.num_candidates - 1)
         else:
             all_das = padded_dataset[input_name]
-            tensor = [all_das[i] for i in range(0, len(all_das), args.num_candidates)]
+            tensor = [all_das[i] for i in range(0, len(all_das))]
 
         tensorized_input.append(tensor)
     return tensorized_input
@@ -179,7 +179,6 @@ def generate_submissions(args):
 
     tokenizer = tokenizer_class.from_pretrained(args.model_metadata_path)
 
-    model_class = GPT2DoubleHeadsModel if "gpt2" in args.model_checkpoint else OpenAIGPTDoubleHeadsModel
     outputs = []
 
     cache_file = {}
@@ -195,9 +194,6 @@ def generate_submissions(args):
     # model I previously trained. This needs to be fixed in the original training script as well
     data = torch.load(args.model_checkpoint + '/pytorch_model.bin')
     model = data["mymodel"]
-    # print(model)
-
-    # model = model_class.from_pretrained(args.model_checkpoint)
     model.to(args.device)
 
     all_das = []
@@ -215,8 +211,8 @@ def generate_submissions(args):
 
             input_ids, mc_token_ids, lm_labels, mc_labels, token_type_ids, das_to_return = batch
             outputs += decode_sequences(input_ids, token_type_ids, model, tokenizer, args)
-            for each in das_to_return:
-                all_das.append(each)
+            all_das += das_to_return
+
             if i % args.log_every_n == 0:
                 logger.info("Saving outputs to cache at %s", args.submission_cache_path)
                 cache_file["outputs"] = outputs
@@ -227,18 +223,23 @@ def generate_submissions(args):
                 context = prefix + "<speaker" + suffix[:2]  # Hacky way to append the speaker tag
                 logger.info(f"Context: {context}")
                 logger.info(f"Sample output: {outputs[i*args.valid_batch_size]}")  # Log first sentence of that batch
+    save_outputs_and_plan(all_das, args, outputs)
+
+
+def save_outputs_and_plan(all_das, args, outputs):
     outputs_tags = []
     print(f"outputs len: {len(outputs)}")
     print(f"all_das len: {len(all_das)}")
-    for i in range(len(outputs)):
-        outputs_tags.append(outputs[i].replace("\n", "") + "".join(all_das[i]) + "\n")
-    outputs_tags_file_path = args.output_file_path[:-4] + "_tagged.txt"
-    with open(outputs_tags_file_path, 'w') as output_file:
-        output_file.writelines(outputs_tags)
+
+    for output, plan in zip(outputs, all_das):
+        outputs_tags.append(output.strip() + "".join(plan) + "\n")
+
+    if outputs_tags:
+        outputs_tags_file_path = args.output_file_path + "_tagged.txt"
+        with open(outputs_tags_file_path, 'w') as output_file:
+            output_file.writelines(outputs_tags)
     with open(args.output_file_path, 'w') as output_file:
         output_file.writelines(outputs)
-
-
 
 
 if __name__ == '__main__':

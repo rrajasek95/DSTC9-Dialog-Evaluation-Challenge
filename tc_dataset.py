@@ -176,6 +176,7 @@ class TopicalChatsKDDataset(TopicalChatsDataset):
         (history, (response, mezza_das, knowledge)) = self.dataset[index]
 
         dialog_state = self._construct_dialog_state(history)
+        das_to_return = []
         if self.inference:
             """
             During inference time, there is no ground truth utterance to 
@@ -257,6 +258,8 @@ class TopicalChatsSWBDDataset(TopicalChatsDataset):
         (history, (response, mezza_das, knowledge)) = self.dataset[index]
 
         dialog_state = self._construct_dialog_state(history)
+        das_to_return = []
+
         if self.inference:
             """
             During inference time, there is no ground truth utterance to 
