@@ -285,7 +285,8 @@ class TopicalChatsSWBDDataset(TopicalChatsDataset):
 
         # The action plan must be ground-truth for training and validation
         # However, for inference time, it must follow the policy
-        action_plan = encoded_das
+        uses_fact = self.tokenizer.encode("_nofact" if len(knowledge) <= 1 else "_fact")
+        action_plan = encoded_das + fact + uses_fact
         for j, candidate in enumerate(candidates):
             lm_labels = bool(j == self.num_candidates - 1)
             instance = self.build_input_from_segments(history, candidate, action_plan, self.tokenizer, lm_labels)
