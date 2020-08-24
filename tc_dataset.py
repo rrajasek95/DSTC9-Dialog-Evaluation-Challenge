@@ -31,6 +31,7 @@ class TopicalChatsDataset(Dataset):
 
     def __getitem__(self, index):
         # For the baseline implementation, we don't need to consider the DA
+        print(index)
         (history, (response, _, fact)) = self.dataset[index]
 
         # h[0] contains the response
@@ -61,8 +62,8 @@ class TopicalChatsDataset(Dataset):
         return candidates
 
     def build_input_from_segments(self, history, response, fact, tokenizer, lm_labels=False):
-        bos, eos, speaker1, speaker2 = tokenizer.convert_tokens_to_ids((self.special_tokens[:-1]))
-
+        bos, eos, end, speaker1, speaker2 = tokenizer.convert_tokens_to_ids((self.special_tokens[:-2]))
+        eot = tokenizer.convert_tokens_to_ids((self.special_tokens[-1]))
         """
         Input construction (may change):
         <bos> FACT <speaker1/2> UTT1 <speaker1/2> ... <speaker2> RESPONSE
@@ -74,10 +75,30 @@ class TopicalChatsDataset(Dataset):
         embeddings affect only the contextual representation (I think!)
           - Rishi
         """
-        sequence = [[bos] + fact] + history + [response + [eos]]
+        new_history = []
+        if history[-1][0] == eot:
+            new_turn = True
+            history = history[:-1]
+        else:
+            new_turn = False
+        for i in range(len(history)):
+            temp = []
+            for j in range(len(history[i]) - 1):
+                temp += history[i][j] + [end]
+            temp += history[i][-1]
+            new_history.append(temp)
 
-        sequence = [sequence[0]] + [[speaker2 if (len(sequence) - i) % 2 else speaker1] + s for i, s in
-                                    enumerate(sequence[1:])]
+        sequence = [[bos] + fact] + new_history + [response + [eos]]
+        if new_turn:
+            sequence = [sequence[0]] + [[speaker2 if (len(sequence) - i) % 2 else speaker1] + s for i, s in
+                                        enumerate(sequence[1:])]
+        # if the generated response is still continuing the previous sentence, do not add the speaker token
+        # and add a <end> token to the last of previous sentence
+        else:
+            sequence = [sequence[0]] + [[speaker2 if (len(sequence) - i) % 2 else speaker1] + s for i, s in
+                                        enumerate(sequence[1:-1])] + [sequence[-1]]
+            sequence[-2] += [end]
+
 
         instance = {}
         instance["input_ids"] = list(chain(*sequence))
@@ -97,8 +118,11 @@ class TopicalChatsDataset(Dataset):
 
     def truncate_sequences(self, history, fact):
         # Truncate history turns to reduce memory requirement
-        if len(history) > (2 * self.max_history + 1):
+        if history[-1][0] == self.tokenizer.encode("<eot>") and len(history) > (2 * self.max_history + 2):
+            history = history[-(2 * self.max_history + 2):]
+        elif len(history) > (2 * self.max_history + 1):
             history = history[-(2 * self.max_history + 1):]
+
 
         # Truncate facts to decrease overall input length
         trunc_facts = fact[:min(len(fact), self.max_fact_length)]
@@ -248,6 +272,19 @@ class TopicalChatsSWBDDataset(TopicalChatsDataset):
         }
 
         return dialog_state
+
+    def _select_appropriate_knowledge(self, dialog_state):
+        turn_history = dialog_state["turn_history"]
+        if len(turn_history) == 0:
+            return ""
+        else:
+            last_turn = self.tokenizer.decode(turn_history[-1])
+            knowledge, similarity = self.ranker_retriever.get_top_n(last_turn, n=1)[0]
+
+            if similarity > 0.2:
+                return knowledge
+            else:
+                return ""
 
     def _execute_heuristic_policy(self, dialog_state):
         das = self.dialog_policy.get_action(dialog_state)

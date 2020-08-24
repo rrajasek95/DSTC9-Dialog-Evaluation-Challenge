@@ -22,6 +22,7 @@ from collections import defaultdict
 from itertools import chain
 from pprint import pformat
 
+from torch.cuda import amp
 from torch.nn import CrossEntropyLoss
 from torch.utils.tensorboard import SummaryWriter
 from tqdm.auto import tqdm
@@ -58,7 +59,7 @@ logger = logging.getLogger(__file__)
 # The _nofact token needs to be added
 ADDITIONAL_TOKENS = ["_nofact"]
 SENTIMENT_TOKENS = ["<POS>", "<NEG>", "<NEU>"]
-SPECIAL_TOKENS = ["<bos>", "<eos>", "<speaker1>", "<speaker2>", "<pad>"]
+SPECIAL_TOKENS = ["<bos>", "<eos>", "<end>", "<speaker1>", "<speaker2>", "<pad>", "<eot>"]  # added <end>, to represent the end of sent
 
 NEW_SWITCHBOARD_TOKENS = list(
     {"spoken-artifact", "+", "spoken-artifact", "tag-question", "spoken-artifact", "statement-opinion", "agree",
@@ -118,7 +119,7 @@ ATTR_TO_SPECIAL_TOKEN = {
     'bos_token': '<bos>',
     'eos_token': '<eos>',
     'pad_token': '<pad>',
-    'additional_special_tokens': ["<speaker1>", "<speaker2>"]
+    'additional_special_tokens': ["<speaker1>", "<speaker2>", "<end>", "<eot>"]
 }
 
 MODEL_INPUTS = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "token_type_ids"]
@@ -381,10 +382,10 @@ def train():
 
     parser.add_argument("--dataset_path", type=str, default="processed_output",
                         help="Path or url of the dataset. If empty download from S3.")
-    parser.add_argument('--training_configuration', type=str, default="sentiment",
+    parser.add_argument('--training_configuration', type=str, default="baseline",
                         help="Training configuration to run",
                         choices=["baseline", "kd-pd-nrg", "kd-pd-nrg-swbd", "sentiment"])
-    parser.add_argument('--dataset_configuration', type=str, default="topical-chats",
+    parser.add_argument('--dataset_configuration', type=str, default="dstc9",
                         help="Configuration of dataset to load for training",
                         choices=["dstc9", "topical-chats"])
     
@@ -502,7 +503,7 @@ def train():
 
 
     # Save configuration
-    save_model_config(model, tokenizer, args)
+    # save_model_config(model, tokenizer, args)
     # save_model(model, 'test_checkpoint', args)
     run_training(model, optimizer, scheduler, loaders, tokenizer, writer, args)
 
