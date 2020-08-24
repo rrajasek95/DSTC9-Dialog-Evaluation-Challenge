@@ -260,6 +260,10 @@ class TopicalChatsSWBDDataset(TopicalChatsDataset):
         dialog_state = self._construct_dialog_state(history)
         das_to_return = []
 
+        # h[0] contains the response
+        history = [h[0] for h in history]
+        history, fact = self.truncate_sequences(history, knowledge)
+
         if self.inference:
             """
             During inference time, there is no ground truth utterance to 
