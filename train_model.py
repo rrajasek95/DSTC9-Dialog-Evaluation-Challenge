@@ -22,6 +22,7 @@ from collections import defaultdict
 from itertools import chain
 from pprint import pformat
 
+from torch.cuda import amp
 from torch.nn import CrossEntropyLoss
 from torch.utils.tensorboard import SummaryWriter
 from tqdm.auto import tqdm
@@ -32,7 +33,8 @@ from torch.utils.data import DataLoader
 from transformers import AdamW, GPT2Tokenizer
 from gpt2 import GPT2DoubleHeadsModel
 
-from tc_dataset import TopicalChatsDataset, TopicalChatsKDDataset, TopicalChatsSentimentDataset
+from tc_dataset import TopicalChatsDataset, TopicalChatsKDDataset, TopicalChatsSentimentDataset, \
+    TopicalChatsDatasetSent, TopicalChatsKDSentDataset
 from train_util.decode import top_filtering
 from train_util.metrics import RunningMetric, RunningLambdaMetric, MetricLambda
 from train_util.scheduler import PiecewiseLinearLR
@@ -58,7 +60,7 @@ logger = logging.getLogger(__file__)
 # The _nofact token needs to be added
 ADDITIONAL_TOKENS = ["_nofact"]
 SENTIMENT_TOKENS = ["<POS>", "<NEG>", "<NEU>"]
-SPECIAL_TOKENS = ["<bos>", "<eos>", "<speaker1>", "<speaker2>", "<pad>"]
+SPECIAL_TOKENS = ["<bos>", "<eos>", "<end>", "<speaker1>", "<speaker2>", "<pad>", "<eot>"]  # added <end>, to represent the end of sent
 
 NEW_SWITCHBOARD_TOKENS = list(
     {"spoken-artifact", "+", "spoken-artifact", "tag-question", "spoken-artifact", "statement-opinion", "agree",
@@ -118,7 +120,7 @@ ATTR_TO_SPECIAL_TOKEN = {
     'bos_token': '<bos>',
     'eos_token': '<eos>',
     'pad_token': '<pad>',
-    'additional_special_tokens': ["<speaker1>", "<speaker2>"]
+    'additional_special_tokens': ["<speaker1>", "<speaker2>", "<end>", "<eot>"]
 }
 
 MODEL_INPUTS = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "token_type_ids"]
@@ -221,7 +223,8 @@ def collate_batch_elements(batch, tokenizer, args):
 
 def get_data_loaders_optimized(args, tokenizer):
     if args.dataset_configuration == "dstc9":
-        topical_chat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache, args.training_configuration)
+        topical_chat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache, args.training_configuration,
+                                   args.generation_configuration)
     else:
         if args.training_configuration == "sentiment":
             dact_scheme = "sentiment"
@@ -229,17 +232,26 @@ def get_data_loaders_optimized(args, tokenizer):
             dact_scheme = "mezza_da" if args.training_configuration == "kd-pd-nrg" else "switchboard_da"
         topical_chat = augmented_tc_dataset(tokenizer, args.dataset_path, args.dataset_cache,
                                             args.knowledge_index_path, dact_scheme, args.knowledge_policy)
-
-    if args.training_configuration == "baseline":
-        train_dataset, valid_dataset = TopicalChatsDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), \
-                                       TopicalChatsDataset(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS, args)
-    elif args.training_configuration == "sentiment":
-        train_dataset, valid_dataset = TopicalChatsSentimentDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), \
-                                       TopicalChatsSentimentDataset(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS,
-                                                             args)
+    if args.generation_configuration != "sentence":
+        if args.training_configuration == "baseline":
+            train_dataset, valid_dataset = TopicalChatsDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), \
+                                           TopicalChatsDataset(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS, args)
+        elif args.training_configuration == "sentiment":
+            train_dataset, valid_dataset = TopicalChatsSentimentDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), \
+                                           TopicalChatsSentimentDataset(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS,
+                                                                 args)
+        else:
+            train_dataset, valid_dataset = TopicalChatsKDDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), \
+                                           TopicalChatsKDDataset(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS, args)
     else:
-        train_dataset, valid_dataset = TopicalChatsKDDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), \
-                                       TopicalChatsKDDataset(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS, args)
+        if args.training_configuration == "baseline":
+            train_dataset, valid_dataset = TopicalChatsDatasetSent(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), \
+                                           TopicalChatsDatasetSent(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS, args)
+        else:
+            train_dataset, valid_dataset = TopicalChatsKDSentDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS,
+                                                                 args), \
+                                           TopicalChatsKDSentDataset(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS,
+                                                                 args)
 
     train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset) if args.distributed else None
     valid_sampler = torch.utils.data.distributed.DistributedSampler(valid_dataset) if args.distributed else None
@@ -381,13 +393,15 @@ def train():
 
     parser.add_argument("--dataset_path", type=str, default="processed_output",
                         help="Path or url of the dataset. If empty download from S3.")
-    parser.add_argument('--training_configuration', type=str, default="sentiment",
+    parser.add_argument('--training_configuration', type=str, default="baseline",
                         help="Training configuration to run",
                         choices=["baseline", "kd-pd-nrg", "kd-pd-nrg-swbd", "sentiment"])
-    parser.add_argument('--dataset_configuration', type=str, default="topical-chats",
+    parser.add_argument('--dataset_configuration', type=str, default="dstc9",
                         help="Configuration of dataset to load for training",
                         choices=["dstc9", "topical-chats"])
-    
+    parser.add_argument('--generation_configuration', type=str, default="turn_level",
+                        help="How the output is generated, sentence by sentence or turn level",
+                        choices=["sentence", "turn_level"])
     parser.add_argument('--knowledge_index_path', type=str, default="tc_processed",
                         help="Path to knowledge index file")
     parser.add_argument("--dataset_cache", type=str, default='./dataset_caches', help="Path or url of the dataset cache")
@@ -502,7 +516,7 @@ def train():
 
 
     # Save configuration
-    save_model_config(model, tokenizer, args)
+    # save_model_config(model, tokenizer, args)
     # save_model(model, 'test_checkpoint', args)
     run_training(model, optimizer, scheduler, loaders, tokenizer, writer, args)
 

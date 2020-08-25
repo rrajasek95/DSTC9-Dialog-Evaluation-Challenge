@@ -12,7 +12,7 @@ from glove.glove_utils import get_max_cosine_similarity, get_max_cosine_similari
 from encoder.fb_models import InferSent
 from knowledge_index import clean
 from sentence_transformers import SentenceTransformer
-
+from spacy.lang.en import English
 
 CONFIG_NAME = 'config.json'
 
@@ -22,35 +22,101 @@ logger = logging.getLogger(__file__)
 def transform_da(da_str):
     return " ".join([f"<{da}>" for da in da_str.split(" ")])
 
-def load_data(dataset_path, split, training_configuration):
+def segment_src(src):
+    nlp = English()
+    sentencizer = nlp.create_pipe("sentencizer")
+    nlp.add_pipe(sentencizer)
+    output = []
+    for each in src:
+        current_context = []
+        for turn in each:
+            doc = nlp(turn)
+            current_context.append([each.text for each in doc.sents])
+        output.append(current_context)
+    return output
+
+def segment_tgt(tgt):
+    nlp = English()
+    sentencizer = nlp.create_pipe("sentencizer")
+    nlp.add_pipe(sentencizer)
+    output = []
+    for turn in tgt:
+        doc = nlp(turn)
+        output.append([each.text for each in doc.sents])
+    return output
+
+def load_data(dataset_path, split, training_configuration, generation_config):
+
     path_prefix = os.path.join(dataset_path, split)
 
     # Splitting history into multiple sentences for ease of further processing
     src = [l.strip().split("_eos")[:-1] for l in open(path_prefix + '.src').readlines()]
     tgt = [l.strip().replace("_go", "").replace("_eos", "") for l in open(path_prefix + '.tgt').readlines()]
     fct = [l.strip() for l in open(path_prefix + '.fct').readlines()]
-    if training_configuration != "baseline":
-        history_da_file = path_prefix + (".src.da" if training_configuration == "kd-pd-nrg" else ".src.swbd3.da")
-        history_resp_file = path_prefix + (".tgt.da" if training_configuration == "kd-pd-nrg" else ".tgt.swbd3.da")
+    segmented_sent = segment_src(src)
+    segmented_tgt = segment_tgt(tgt)
+    if generation_config != "sentence":
+        if training_configuration != "baseline":
+            history_da_file = path_prefix + (".src.da" if training_configuration == "kd-pd-nrg" else ".src.swbd3.da")
+            history_resp_file = path_prefix + (".tgt.da" if training_configuration == "kd-pd-nrg" else ".tgt.swbd3.da")
 
-        history_da = [list(map(transform_da, l.strip().split("_eos")[:-1])) for l in open(history_da_file).readlines()]
-        history_da = [[each.replace("<>", "") for each in history_da[i]] for i in
-                      range(len(history_da))]
-        history_knowledge = itertools.repeat(itertools.repeat(""))
-        # history_knowledge = [l.strip().split("_eos")[:-1] for l in open(path_prefix + ".src.fct")]
-        resp_da = [transform_da(l.strip()) for l in open(history_resp_file).readlines()]
-    else:
-        history_da = itertools.repeat(itertools.repeat(None))
-        history_knowledge = itertools.repeat(itertools.repeat(None))
-        resp_da = itertools.repeat(None)
+            history_da = [list(map(transform_da, l.strip().split("_eos")[:-1])) for l in open(history_da_file).readlines()]
+            history_da = [[each.replace("<>", "") for each in history_da[i]] for i in
+                          range(len(history_da))]
+            history_knowledge = itertools.repeat(itertools.repeat(""))
+            # history_knowledge = [l.strip().split("_eos")[:-1] for l in open(path_prefix + ".src.fct")]
+            resp_da = [transform_da(l.strip()) for l in open(history_resp_file).readlines()]
+        else:
+            history_da = itertools.repeat(itertools.repeat(None))
+            history_knowledge = itertools.repeat(itertools.repeat(None))
+            resp_da = itertools.repeat(None)
 
-    context = [zip(s, h, k) for (s, h, k) in zip(src, history_da, history_knowledge)]
-    return list(zip(context, zip(tgt, resp_da, fct)))
+        context = [zip(s, h, k) for (s, h, k) in zip(src, history_da, history_knowledge)]
+        return list(zip(context, zip(tgt, resp_da, fct)))
+    elif generation_config == "sentence":
+
+        if training_configuration != "baseline":
+            history_da_file = path_prefix + (".src.da" if training_configuration == "kd-pd-nrg" else ".src.swbd3.da")
+            history_resp_file = path_prefix + (".tgt.da" if training_configuration == "kd-pd-nrg" else ".tgt.swbd3.da")
+
+            history_da = [list(map(transform_da, l.strip().split("_eos")[:-1])) for l in
+                          open(history_da_file).readlines()]
+            history_da = [[each.replace("<>", "") for each in history_da[i]] for i in
+                          range(len(history_da))]
+            history_knowledge = itertools.repeat(itertools.repeat(""))
+            # history_knowledge = [l.strip().split("_eos")[:-1] for l in open(path_prefix + ".src.fct")]
+            # We load the DAs as an iterable to make it compatible with the baseline itertools repeat logic
+            resp_da = [transform_da(l.strip()).split() for l in open(history_resp_file).readlines()]
+        else:
+            history_da = itertools.repeat(itertools.repeat(None))
+            history_knowledge = itertools.repeat(itertools.repeat(None))
+            resp_da = itertools.repeat(itertools.repeat(None))
+        new_src = []
+        new_tgt = []
+        new_fct = []
+        new_resp_da = []
+
+        # for i in range(len(src)):
+        for i, (src_sentences, tgt_segments, fact, tgt_das) in enumerate(zip(segmented_sent, segmented_tgt, fct, resp_da)):
+            for j, (tgt_segment, tgt_da) in enumerate(zip(tgt_segments, tgt_das)):
+                # target [j] is not the beginning of the turn
+                if j != 0:
+                    new_src.append(src_sentences + [tgt_segments[:j]])
+                # the target is the beginning of the turn
+                # the appended history will have a <eot> token to distinguish the turn boundary
+                else:
+                    new_src.append(src_sentences + ["<eot>"])
+                new_tgt.append(tgt_segment)
+                new_fct.append(fact)
+
+                new_resp_da.append(tgt_da)
+
+        context = [zip(s, h, k) for (s, h, k) in zip(new_src, history_da, history_knowledge)]
+        return list(zip(context, zip(new_tgt, new_resp_da, new_fct)))
 
 
-def get_dataset(tokenizer, dataset_path, dataset_cache, training_configuration):
+def get_dataset(tokenizer, dataset_path, dataset_cache, training_configuration, generation_config):
     dataset_cache = dataset_cache + '_' + type(tokenizer).__name__
-
     if dataset_cache and os.path.isfile(dataset_cache):
         logger.info("Load tokenized dataset from cache at %s", dataset_cache)
         dataset = torch.load(dataset_cache)
@@ -58,11 +124,10 @@ def get_dataset(tokenizer, dataset_path, dataset_cache, training_configuration):
         logger.info("Loading dataset from %s", dataset_path)
 
         splits = ['train', 'valid_freq', 'test_freq', 'test_rare', 'valid_rare']
-
         dataset = dict()
 
         for split in splits:
-            data_items = load_data(dataset_path, split, training_configuration)
+            data_items = load_data(dataset_path, split, training_configuration, generation_config)
 
             def tokenize(obj):
                 if obj is None:
