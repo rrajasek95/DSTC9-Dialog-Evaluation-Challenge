@@ -33,7 +33,8 @@ from torch.utils.data import DataLoader
 from transformers import AdamW, GPT2Tokenizer
 from gpt2 import GPT2DoubleHeadsModel
 
-from tc_dataset import TopicalChatsDataset, TopicalChatsKDDataset, TopicalChatsSentimentDataset, TopicalChatsDatasetSent
+from tc_dataset import TopicalChatsDataset, TopicalChatsKDDataset, TopicalChatsSentimentDataset, \
+    TopicalChatsDatasetSent, TopicalChatsKDSentDataset
 from train_util.decode import top_filtering
 from train_util.metrics import RunningMetric, RunningLambdaMetric, MetricLambda
 from train_util.scheduler import PiecewiseLinearLR
@@ -246,6 +247,11 @@ def get_data_loaders_optimized(args, tokenizer):
         if args.training_configuration == "baseline":
             train_dataset, valid_dataset = TopicalChatsDatasetSent(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), \
                                            TopicalChatsDatasetSent(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS, args)
+        else:
+            train_dataset, valid_dataset = TopicalChatsKDSentDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS,
+                                                                 args), \
+                                           TopicalChatsKDSentDataset(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS,
+                                                                 args)
 
     train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset) if args.distributed else None
     valid_sampler = torch.utils.data.distributed.DistributedSampler(valid_dataset) if args.distributed else None

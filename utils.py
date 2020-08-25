@@ -74,26 +74,45 @@ def load_data(dataset_path, split, training_configuration, generation_config):
         context = [zip(s, h, k) for (s, h, k) in zip(src, history_da, history_knowledge)]
         return list(zip(context, zip(tgt, resp_da, fct)))
     elif generation_config == "sentence":
-        if training_configuration == "baseline":
+
+        if training_configuration != "baseline":
+            history_da_file = path_prefix + (".src.da" if training_configuration == "kd-pd-nrg" else ".src.swbd3.da")
+            history_resp_file = path_prefix + (".tgt.da" if training_configuration == "kd-pd-nrg" else ".tgt.swbd3.da")
+
+            history_da = [list(map(transform_da, l.strip().split("_eos")[:-1])) for l in
+                          open(history_da_file).readlines()]
+            history_da = [[each.replace("<>", "") for each in history_da[i]] for i in
+                          range(len(history_da))]
+            history_knowledge = itertools.repeat(itertools.repeat(""))
+            # history_knowledge = [l.strip().split("_eos")[:-1] for l in open(path_prefix + ".src.fct")]
+            # We load the DAs as an iterable to make it compatible with the baseline itertools repeat logic
+            resp_da = [transform_da(l.strip()).split() for l in open(history_resp_file).readlines()]
+        else:
             history_da = itertools.repeat(itertools.repeat(None))
             history_knowledge = itertools.repeat(itertools.repeat(None))
-            resp_da = itertools.repeat(None)
-            new_src = []
-            new_tgt = []
-            new_fct = []
-            for i in range(len(src)):
-                for j in range(len(segmented_tgt[i])):
-                    # target [j] is not the beginning of the turn
-                    if j != 0:
-                        new_src.append(segmented_sent[i] + [segmented_tgt[i][:j]])
-                    # the target is the beginning of the turn
-                    # the appended history will have a <eot> token to distinguish the turn boundary
-                    else:
-                        new_src.append(segmented_sent[i] + ["<eot>"])
-                    new_tgt.append(segmented_tgt[i][j])
-                    new_fct.append(fct[i])
-            context = [zip(s, h, k) for (s, h, k) in zip(new_src, history_da, history_knowledge)]
-            return list(zip(context, zip(new_tgt, resp_da, new_fct)))
+            resp_da = itertools.repeat(itertools.repeat(None))
+        new_src = []
+        new_tgt = []
+        new_fct = []
+        new_resp_da = []
+
+        # for i in range(len(src)):
+        for i, (src_sentences, tgt_segments, fact, tgt_das) in enumerate(zip(segmented_sent, segmented_tgt, fct, resp_da)):
+            for j, (tgt_segment, tgt_da) in enumerate(zip(tgt_segments, tgt_das)):
+                # target [j] is not the beginning of the turn
+                if j != 0:
+                    new_src.append(src_sentences + [tgt_segments[:j]])
+                # the target is the beginning of the turn
+                # the appended history will have a <eot> token to distinguish the turn boundary
+                else:
+                    new_src.append(src_sentences + ["<eot>"])
+                new_tgt.append(tgt_segment)
+                new_fct.append(fact)
+
+                new_resp_da.append(tgt_da)
+
+        context = [zip(s, h, k) for (s, h, k) in zip(new_src, history_da, history_knowledge)]
+        return list(zip(context, zip(new_tgt, new_resp_da, new_fct)))
 
 
 def get_dataset(tokenizer, dataset_path, dataset_cache, training_configuration, generation_config):

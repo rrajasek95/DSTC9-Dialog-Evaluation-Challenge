@@ -329,6 +329,109 @@ class TopicalChatsKDDataset(TopicalChatsDataset):
 
         return instances
 
+class TopicalChatsKDSentDataset(TopicalChatsDatasetSent):
+    def _init_knowledge_index(self, knowledge_index_path, knowledge_policy):
+        with open(knowledge_index_path, 'rb') as knowledge_index_file:
+            index_data = pickle.load(knowledge_index_file)
+        if knowledge_policy == "tf_idf":
+            self.ranker_retriever = TfIdfRankerRetriever(index_data)
+        else:
+            self.ranker_retriever = EmbRankerRetriever(index_data)
+
+    def __init__(self, dataset, tokenizer, special_tokens, args, inference=False):
+        self.dialog_policy = KnowledgeDependent()
+
+        # For inference, the model will start executing the
+        # heuristic dialog policy and knowledge selection policy
+        self.inference = inference
+        if self.inference:
+            self._init_knowledge_index(args.knowledge_index_path, args.knowledge_policy)
+        self.dataset_configuration = args.dataset_configuration
+        super().__init__(dataset, tokenizer, special_tokens, args)
+
+    def sample_candidates(self, dataset, current_conversation_index):
+        # Lets just hope that the number of cases where the true responses gets included in the
+        # candidates is vanishingly small
+        candidates = [response for (_, (response, _, _)) in random.sample(dataset, self.num_candidates - 1)]
+
+        return candidates
+
+    def _construct_dialog_state(self, history):
+        turn_history = []
+        da_history = []
+        knowledge_history = [""]  # Hack to always have empty
+        for (response, das, past_knowledge) in history:
+            turn_history.append(response)
+            da_history += das
+            if self.inference:
+                # Knowledge history only matters during inference
+                # this also optimizes running an unnecessary decode
+                # during training
+                knowledge_history.append(self.tokenizer.decode(past_knowledge))
+
+        dialog_state = {
+            "turn_history": turn_history,
+            "da_history": da_history,
+            "knowledge_history": knowledge_history
+        }
+
+        return dialog_state
+
+    def _select_appropriate_knowledge(self, dialog_state):
+        turn_history = dialog_state["turn_history"]
+        if len(turn_history) == 0:
+            return ""
+        else:
+            last_turn = self.tokenizer.decode(turn_history[-1])
+            knowledge, similarity = self.ranker_retriever.get_top_n(last_turn, n=1)[0]
+
+            if similarity > 0.2:
+                return knowledge
+            else:
+                return ""
+
+    def _execute_heuristic_policy(self, dialog_state):
+        knowledge = self._select_appropriate_knowledge(dialog_state)
+        dialog_state["knowledge"] = knowledge  # Augment dialog state with knowledge
+        das, knowledge = self.dialog_policy.get_knowledge_grounded_action(dialog_state)
+        return das, self.tokenizer.encode(knowledge)
+
+    def __getitem__(self, index):
+        (history, (response, mezza_das, knowledge)) = self.dataset[index]
+
+        dialog_state = self._construct_dialog_state(history)
+        das_to_return = []
+        if self.inference:
+            """
+            During inference time, there is no ground truth utterance to 
+            choose the appropriate knowledge on. So we use a heuristic policy 
+            to "predict" the best knowledge and dialogue act to use for the next turn.
+            """
+            mezza_das, knowledge = self._execute_heuristic_policy(dialog_state)
+            das_to_return = [f"<{da}>" for da in mezza_das]
+            mezza_das = self.tokenizer.encode([f"<{da}>" for da in mezza_das])
+        history, fact = self.truncate_sequences(dialog_state["turn_history"], knowledge)
+
+        candidates = self.sample_candidates(self.dataset, index)
+        candidates.append(response)
+        if self.dataset_configuration != "dstc9":
+            encoded_das = self.tokenizer.encode([f"<{da['da']}>" for da in mezza_das])
+        else:
+            encoded_das = mezza_das
+        instances = []
+
+        # The action plan must be ground-truth for training and validation
+        # However, for inference time, it must follow the policy
+        uses_fact = self.tokenizer.encode("_nofact" if len(knowledge) <= 1 else "_fact")
+        action_plan = encoded_das + fact + uses_fact
+        for j, candidate in enumerate(candidates):
+            lm_labels = bool(j == self.num_candidates - 1)
+            instance = self.build_input_from_segments(history, candidate, action_plan, self.tokenizer, lm_labels)
+            instance['das_to_return'] = das_to_return
+            instances.append(instance)
+
+        return instances
+
 
 class TopicalChatsSWBDDataset(TopicalChatsDataset):
 
