@@ -399,7 +399,7 @@ def train():
     parser.add_argument('--dataset_configuration', type=str, default="dstc9",
                         help="Configuration of dataset to load for training",
                         choices=["dstc9", "topical-chats"])
-    parser.add_argument('--generation_configuration', type=str, default="sentence",
+    parser.add_argument('--generation_configuration', type=str, default="turn_level",
                         help="How the output is generated, sentence by sentence or turn level",
                         choices=["sentence", "turn_level"])
     parser.add_argument('--knowledge_index_path', type=str, default="tc_processed",
