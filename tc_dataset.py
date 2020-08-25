@@ -167,7 +167,7 @@ class TopicalChatsDatasetSent(Dataset):
         embeddings affect only the contextual representation (I think!)
           - Rishi
         """
-        is_new_turn = history[-1][0] == eot
+        is_new_turn = len(history) == 0 or history[-1][0] == eot
         if is_new_turn:
             history = history[:-1] # Skip EOT marker
 
