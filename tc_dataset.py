@@ -124,7 +124,6 @@ class TopicalChatsDatasetSent(Dataset):
 
     def __getitem__(self, index):
         # For the baseline implementation, we don't need to consider the DA
-        print(index)
         (history, (response, _, fact)) = self.dataset[index]
 
         # h[0] contains the response
@@ -168,21 +167,21 @@ class TopicalChatsDatasetSent(Dataset):
         embeddings affect only the contextual representation (I think!)
           - Rishi
         """
-        new_history = []
-        if history[-1][0] == eot:
-            new_turn = True
-            history = history[:-1]
-        else:
-            new_turn = False
-        for i in range(len(history)):
-            temp = []
-            for j in range(len(history[i]) - 1):
-                temp += history[i][j] + [end]
-            temp += history[i][-1]
-            new_history.append(temp)
+        is_new_turn = history[-1][0] == eot
+        if is_new_turn:
+            history = history[:-1] # Skip EOT marker
 
-        sequence = [[bos] + fact] + new_history + [response + [eos]]
-        if new_turn:
+        segmented_history = []
+        for i, history_turn in enumerate(history):
+            # interleave end of sentence markers between segments
+            segments = list(chain.from_iterable(
+                [turn_segment + [end] for turn_segment in history_turn[:-1]] + [history_turn[-1]]
+            ))
+
+            segmented_history.append(segments)
+
+        sequence = [[bos] + fact] + segmented_history + [response + [eos]]
+        if is_new_turn:
             sequence = [sequence[0]] + [[speaker2 if (len(sequence) - i) % 2 else speaker1] + s for i, s in
                                         enumerate(sequence[1:])]
         # if the generated response is still continuing the previous sentence, do not add the speaker token
@@ -192,10 +191,15 @@ class TopicalChatsDatasetSent(Dataset):
                                         enumerate(sequence[1:-1])] + [sequence[-1]]
             sequence[-2] += [end]
 
-
         instance = {}
         instance["input_ids"] = list(chain(*sequence))
-        instance["token_type_ids"] = [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence) for _ in s]
+        if is_new_turn:
+            instance["token_type_ids"] = [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence) for _ in s]
+        else:
+            # The token type ids for the response segment must match the preceding segment
+            # for turn continuation since they belong to the same speaker
+            instance["token_type_ids"] = [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence[:-1]) for _ in s] \
+                + [speaker2 if (len(sequence) - 2) % 2 else speaker1 for _ in sequence[-1]]
         instance["mc_token_ids"] = len(instance["input_ids"]) - 1
 
         """
