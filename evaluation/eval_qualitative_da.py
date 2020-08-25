@@ -7,6 +7,10 @@ from tqdm.auto import tqdm
 
 import jiwer
 
+import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix, plot_confusion_matrix, classification_report
+
+
 def analyze_da_utterances(args):
     da_to_utterance_map = defaultdict(list)
     nlp = spacy.load('en_core_web_sm')
@@ -41,6 +45,30 @@ def analyze_da_realization(sentence_plan_path, realized_acts_path):
 
 
     print(jiwer.compute_measures(sentence_plans, realized_acts))
+
+    all_plan_das = []
+    all_real_das = []
+
+    for plan, realized in zip(sentence_plans, realized_acts):
+        plan_acts = plan.split(" ")
+        real_das = realized.split(" ")
+
+        len_diff = len(plan_acts) - len(real_das)
+
+        if len_diff < 0:
+            plan_acts = plan_acts + ["None"] * -len_diff
+        elif len_diff > 0:
+            real_das = real_das + ["None"] * len_diff
+
+        all_plan_das += plan_acts
+        all_real_das += real_das
+
+    labels = list(set(all_plan_das))
+    datoi = {label: i for i, label in enumerate(labels)}
+    plan_da_idx = [datoi[label] for label in all_plan_das]
+    real_da_idx = [datoi[label] for label in all_real_das]
+    print(classification_report(plan_da_idx, real_da_idx, target_names=labels))
+
 
 
 if __name__ == '__main__':
