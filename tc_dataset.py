@@ -215,7 +215,7 @@ class TopicalChatsDatasetSent(Dataset):
 
     def truncate_sequences(self, history, fact):
         # Truncate history turns to reduce memory requirement
-        if history[-1][0] == self.tokenizer.encode("<eot>") and len(history) > (2 * self.max_history + 2):
+        if len(history) > (2 * self.max_history + 2) and history[-1][0] == self.tokenizer.encode("<eot>"):
             history = history[-(2 * self.max_history + 2):]
         elif len(history) > (2 * self.max_history + 1):
             history = history[-(2 * self.max_history + 1):]
