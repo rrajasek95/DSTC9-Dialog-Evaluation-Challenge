@@ -55,30 +55,43 @@ def analyze_split_ath(split_data):
     print("Athena DA:")
     analyze_da_information_for_split(athena_da_segment_mapping)
 
+def analyze_length_bin_distribution(split_data):
+
+    bin_tokens = defaultdict(list)
+    for conv_id, conv_data in split_data.items():
+        turns = conv_data['content']
+
+        for turn in turns:
+            segments = turn['segments']
+
+            for segment in segments:
+                bin = segment['length_bin']
+                token_count = segment['num_tokens']
+                bin_tokens[bin].append(token_count)
+    from scipy.stats import describe
+
+    for bin, lengths in bin_tokens.items():
+        print("Bin: ", bin)
+        print(describe(lengths))
+
 def analyze_tc_data(args):
 
     splits = ['train' ] # , 'valid_freq', 'test_freq']
 
     for split in splits:
-        if args.ath:
-            split_file = f'{split}_anno_athena.json'
-        else:
-            split_file = f'{split}_anno_v5.json'
+        split_file = f'{split}_{args.anno_file_suffix}'
         split_file_path = os.path.join(args.data_path, split_file)
 
         with open(split_file_path, 'r') as split_f:
             split_data = json.load(split_f)
         print("Split:", split)
-
-        if args.ath:
-            analyze_split_ath(split_data)
-        else:
-            analyze_split(split_data)
+        analyze_length_bin_distribution(split_data)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_path', default='./tc_processed')
-    parser.add_argument('--ath', action='store_true')
+    parser.add_argument('--anno_file_suffix', type=str,
+                        default='anno_length_bin.json')
     args = parser.parse_args()
     analyze_tc_data(args)

@@ -293,6 +293,7 @@ class TopicalChatsKDDataset(TopicalChatsDataset):
         (history, (response, mezza_das, knowledge)) = self.dataset[index]
 
         dialog_state = self._construct_dialog_state(history)
+        das_to_return = []
         if self.inference:
             """
             During inference time, there is no ground truth utterance to 
@@ -387,6 +388,12 @@ class TopicalChatsSWBDDataset(TopicalChatsDataset):
         (history, (response, mezza_das, knowledge)) = self.dataset[index]
 
         dialog_state = self._construct_dialog_state(history)
+        das_to_return = []
+
+        # h[0] contains the response
+        history = [h[0] for h in history]
+        history, fact = self.truncate_sequences(history, knowledge)
+
         if self.inference:
             """
             During inference time, there is no ground truth utterance to 
@@ -408,14 +415,12 @@ class TopicalChatsSWBDDataset(TopicalChatsDataset):
 
         # The action plan must be ground-truth for training and validation
         # However, for inference time, it must follow the policy
-        action_plan = encoded_das
+        uses_fact = self.tokenizer.encode("_nofact" if len(knowledge) <= 1 else "_fact")
+        action_plan = encoded_das + fact + uses_fact
         for j, candidate in enumerate(candidates):
             lm_labels = bool(j == self.num_candidates - 1)
-            instance = self.build_input_from_segments([], candidate, action_plan, self.tokenizer, lm_labels)
+            instance = self.build_input_from_segments(history, candidate, action_plan, self.tokenizer, lm_labels)
             instance['das_to_return'] = das_to_return
-            if len(das_to_return) == 0:
-                print(index)
-                print([self.tokenizer.decode([each for each in sentences]) for sentences in dialog_state['turn_history']])
             instances.append(instance)
 
         return instances
