@@ -124,7 +124,7 @@ def build_sent_model_embs_set(reading_set, model, knowledge_convo_embs, knowledg
     return knowledge_convo_embs
 
 
-def build_sent_model_embs_set_summarize_arts(reading_set, model, knowledge_convo_embs, knowledge_policy="facebook"):
+def build_sent_model_embs_set_summarize_arts(reading_set, model, knowledge_convo_embs, knowledge_policy="bert"):
 
     convo_sets = []
     all_knowledge_sents = []
@@ -172,8 +172,8 @@ def build_sent_model_embs_set_summarize_arts(reading_set, model, knowledge_convo
         knowledge_convo_embs[convo_id].append([all_knowledge_sents[i], embeddings[i]])
     return knowledge_convo_embs
 
-def build_sent_model_embs_set_split_arts(reading_set, model, knowledge_convo_embs, knowledge_policy="facebook"):
 
+def build_sent_model_embs_set_split_arts(reading_set, model, knowledge_convo_embs, knowledge_policy="facebook"):
     convo_sets = []
     all_knowledge_sents = []
     for conv_id, data in reading_set.items():

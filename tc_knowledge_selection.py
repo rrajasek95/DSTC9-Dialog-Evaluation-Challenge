@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import torch
 
-from nltk import word_tokenize
+from nltk import word_tokenize, sent_tokenize
 
 from encoder.fb_models import InferSent
 from glove.glove_utils import get_cosine_similarity_embs_all
@@ -199,6 +199,56 @@ def generate_knowledge_bert(test_freq_conversations, test_freq_reading_set, vect
     ))
 
 
+def generate_knowledge_bert_sent(test_freq_conversations, test_freq_reading_set, vectorizer):
+    model = SentenceTransformer('bert-base-nli-stsb-mean-tokens')
+    turn_knowledge = []
+
+    for conv_id, conv_data in test_freq_conversations.items():
+        for i, turn in enumerate(conv_data["content"]):
+            message = turn["message"]
+            sentences = sent_tokenize(message)
+            for text in sentences:
+                available_knowledge = vectorizer[conv_id]
+
+                fact_sims = get_cosine_similarity_embs_all(clean(text), available_knowledge, model, knowledge_policy="bert")
+                fact_sims.sort(key=lambda x: x[1], reverse=True)
+                if i > 0:
+                    same_as_prev_knowledge = fact_sims[0][0] == turn_knowledge[-1]["knowledge_1"]
+                else:
+                    same_as_prev_knowledge = False
+                data = {
+                    "conversation_id": conv_id,
+                    "turn": (i + 1),
+                    "text": text,
+                    "knowledge_1": fact_sims[0][0],
+                    "knowledge_1_similarity": fact_sims[0][1],
+                    "knowledge_2": fact_sims[1][0],
+                    "knowledge_2_similarity": fact_sims[1][1],
+                    "knowledge_3": fact_sims[2][0],
+                    "knowledge_3_similarity": fact_sims[2][1],
+                    "same_as_prev_knowledge": same_as_prev_knowledge
+                }
+                turn_knowledge.append(data)
+    test_freq_knowledge_dataframe = pd.DataFrame(turn_knowledge,
+                                                 columns=[
+                                                     'conversation_id',
+                                                     'turn',
+                                                     'text',
+                                                     'knowledge_1',
+                                                     'knowledge_1_similarity',
+                                                     'knowledge_2',
+                                                     'knowledge_2_similarity',
+                                                     'knowledge_3',
+                                                     'knowledge_3_similarity',
+                                                     'same_as_prev_knowledge'
+                                                 ])
+
+    test_freq_knowledge_dataframe.to_csv(os.path.join(
+        'tc_processed',
+        'test_freq_bert_sentences.csv'
+    ))
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
@@ -232,7 +282,7 @@ if __name__ == '__main__':
         )
         knowledge_index_path = os.path.join(
             'tc_processed',
-            'tc_knowledge_index_bert_test_freq_summarize.pkl'
+            'tc_knowledge_index_bert_test_freq.pkl'
         )
 
         with open(knowledge_index_path, 'rb') as knowledge_index_file:
@@ -264,4 +314,5 @@ if __name__ == '__main__':
     elif args.knowledge_selection_policy == "infersent":
         generate_knowledge_infersent(test_freq_conversations, test_freq_reading_set, vectorizer)
     else:
-        generate_knowledge_bert(test_freq_conversations, test_freq_reading_set, vectorizer)
+        # generate_knowledge_bert(test_freq_conversations, test_freq_reading_set, vectorizer)
+        generate_knowledge_bert_sent(test_freq_conversations, test_freq_reading_set, vectorizer)

@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import pickle
+import string
 
 import more_itertools
 import spacy
@@ -24,6 +25,8 @@ Performs the following kinds of annotations:
 2. Dialog act annotation
 """
 
+def clean(s):
+    return ''.join([c if c not in string.punctuation else ' ' for c in s.lower()])
 
 def flair_annotate(tagger, split_data):
     for conv_id, dialog_data in tqdm(split_data.items()):
@@ -290,6 +293,97 @@ def perform_spotlight_anno(args):
             json.dump(annotated_split, annotated_file)
 
 
+def load_split_reading_set(data_file_path, split):
+    split_reading_set_path = os.path.join(
+        data_file_path,
+        'reading_sets',
+        'post-build',
+        f'{split}.json'
+    )
+    with open(split_reading_set_path, 'r') as reading_set_file:
+        split_reading_set = json.load(reading_set_file)
+
+    return split_reading_set
+
+
+def spotlight_annotate_knowledge(tagger, split_data):
+    agents = ["agent_1", "agent_2"]
+
+    for conv_id, dialog_data in tqdm(split_data.items()):
+        for agent in agents:
+            for idx, data in dialog_data[agent].items():
+                fun_facts = data.get("fun_facts")
+                if fun_facts:
+                    facts = []
+                    for fact in fun_facts:
+                        fact_dict = {}
+                        fact_dict["text"] = fact
+                        spotlight_entities = tagger.get_spotlight_annotation(clean(fact), confidence=0.5)
+                        if spotlight_entities:
+                            fact_dict["dbpedia_entities"] = spotlight_entities
+                        facts.append(fact_dict)
+                    data["fun_facts"] = facts
+
+                short_wiki = data.get("shortened_wiki_lead_section")
+                if short_wiki:
+                    short = {}
+                    short["text"] = short_wiki
+                    spotlight_entities = tagger.get_spotlight_annotation(clean(short_wiki), confidence=0.5)
+                    if spotlight_entities:
+                        short["dbpedia_entities"] = spotlight_entities
+                    data["shortened_wiki_lead_section"] = short
+
+                summarized_wiki = data.get("summarized_wiki_lead_section")
+                if summarized_wiki:
+                    summ = {}
+                    summ["text"] = summarized_wiki
+                    spotlight_entities = tagger.get_spotlight_annotation(clean(summarized_wiki), confidence=0.5)
+                    if spotlight_entities:
+                        summ["dbpedia_entities"] = spotlight_entities
+                    data["summarized_wiki_lead_section"] = summ
+
+            article_data = dialog_data["article"]
+            article_indices = ['AS1', 'AS2', 'AS3', 'AS4']
+
+            # Article information
+            if "AS1" in article_data:
+                for idx in article_indices:
+                    sentence = article_data[idx]
+                    if len(word_tokenize(sentence)) < 5:
+                        continue
+                    art_dict = {}
+                    art_dict["text"] = sentence
+                    spotlight_entities = tagger.get_spotlight_annotation(clean(summarized_wiki), confidence=0.5)
+                    if spotlight_entities:
+                        art_dict["dbpedia_entities"] = spotlight_entities
+                    article_data[idx] = art_dict
+
+    return split_data
+
+
+def perform_spotlight_anno_knowledge(args):
+    splits = [
+        # 'train',
+        # 'valid_freq',
+        # 'valid_rare',
+        'test_freq',
+        # 'test_rare'
+    ]
+    data_file_path = "alexa-prize-topical-chat-dataset"
+
+
+    tagger = SpotlightTagger(
+        ontology_json='annotators/ontology_classes.json',
+        spotlight_server_url='http://localhost:2222/rest/annotate')
+    for split in splits:
+        reading_set = {}
+        reading_set.update(load_split_reading_set(data_file_path, split))
+
+        annotated_split = spotlight_annotate_knowledge(tagger, reading_set)
+
+        with open(os.path.join(data_file_path, split + '_spotlight.json'), 'w') as annotated_file:
+            json.dump(annotated_split, annotated_file)
+
 
 def perform_length_binning_anno(args):
     data_dir = os.path.join(
@@ -421,9 +515,11 @@ if __name__ == '__main__':
     args = parser.parse_args()
     # perform_athena_da_annotation(args)
     # merge_all_annotations(args)
-    perform_vader_annotation(args, True)
+    # perform_vader_annotation(args, True)
 
     # perform_spotlight_anno(args)
+    perform_spotlight_anno_knowledge(args)
+
     # try:
     #     perform_flair_enhanced_anno(args)
     # except:
