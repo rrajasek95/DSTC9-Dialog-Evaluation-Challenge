@@ -85,7 +85,7 @@ def analyze_tc_data(args):
         with open(split_file_path, 'r') as split_f:
             split_data = json.load(split_f)
         print("Split:", split)
-        analyze_length_bin_distribution(split_data)
+        analyze_split(split_data)
 
 
 if __name__ == '__main__':
