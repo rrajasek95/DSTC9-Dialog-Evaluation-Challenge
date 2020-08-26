@@ -31,7 +31,10 @@ class SpotlightTagger(object):
 
         self.singer_none_type = {'Cardi B', 'Billie Eilish', 'TheFatRat'}
 
-        self.false_possitive_list = {'Wide area network', 'Alexa Internet', 'Haha (entertainer)', 'Go (game)', 'Ha-ha',
+        self.false_possitive_list = {'Wide area network',
+                                     # this was a false positive during the alexa prize
+                                     # 'Alexa Internet',
+                                     'Haha (entertainer)', 'Go (game)', 'Ha-ha',
                           'Hectare', 'Hell', 'Good Question', 'Uh-huh', 'Penis', 'Oh Yeah (Yello song)', 'Good Movie', 'Pay Attention',
                         'Fuck', 'Flatulence', 'Blah Blah Blah (Kesha song)', 'Okey', 'Watching Movies', 'Good Stuff',
                           'Vijay Award for Favourite Director', "I Love Music (The O'Jays song)", 'List of recurring Futurama characters',
@@ -83,8 +86,8 @@ class SpotlightTagger(object):
             entity_type_schema = []
             entity_type_dbpedia = []
 
-            # Remove duplicates and FP
-            if entity in found_entity or entity in self.false_possitive_list:
+            # Remove FPs
+            if entity in self.false_possitive_list:
                 print('Filter entity:{}'.format(entity))
                 continue
 

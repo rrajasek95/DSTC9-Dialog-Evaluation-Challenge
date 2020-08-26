@@ -311,63 +311,65 @@ def spotlight_annotate_knowledge(tagger, split_data):
 
     for conv_id, dialog_data in tqdm(split_data.items()):
         for agent in agents:
-            for idx, data in dialog_data[agent].items():
-                fun_facts = data.get("fun_facts")
-                if fun_facts:
-                    facts = []
-                    for fact in fun_facts:
-                        fact_dict = {}
-                        fact_dict["text"] = fact
-                        spotlight_entities = tagger.get_spotlight_annotation(clean(fact), confidence=0.5)
-                        if spotlight_entities:
-                            fact_dict["dbpedia_entities"] = spotlight_entities
-                        facts.append(fact_dict)
-                    data["fun_facts"] = facts
-
-                short_wiki = data.get("shortened_wiki_lead_section")
-                if short_wiki:
-                    short = {}
-                    short["text"] = short_wiki
-                    spotlight_entities = tagger.get_spotlight_annotation(clean(short_wiki), confidence=0.5)
-                    if spotlight_entities:
-                        short["dbpedia_entities"] = spotlight_entities
-                    data["shortened_wiki_lead_section"] = short
-
-                summarized_wiki = data.get("summarized_wiki_lead_section")
-                if summarized_wiki:
-                    summ = {}
-                    summ["text"] = summarized_wiki
-                    spotlight_entities = tagger.get_spotlight_annotation(clean(summarized_wiki), confidence=0.5)
-                    if spotlight_entities:
-                        summ["dbpedia_entities"] = spotlight_entities
-                    data["summarized_wiki_lead_section"] = summ
+            annotate_agent_data(agent, dialog_data, tagger)
 
             article_data = dialog_data["article"]
             article_indices = ['AS1', 'AS2', 'AS3', 'AS4']
 
             # Article information
-            if "AS1" in article_data:
-                for idx in article_indices:
-                    sentence = article_data[idx]
-                    if len(word_tokenize(sentence)) < 5:
-                        continue
-                    art_dict = {}
-                    art_dict["text"] = sentence
-                    spotlight_entities = tagger.get_spotlight_annotation(clean(summarized_wiki), confidence=0.5)
-                    if spotlight_entities:
-                        art_dict["dbpedia_entities"] = spotlight_entities
-                    article_data[idx] = art_dict
+        if "AS1" in article_data:
+            for idx in article_indices:
+                sentence = article_data[idx]
+                art_dict = {}
+                art_dict["text"] = sentence
+                spotlight_entities = tagger.get_spotlight_annotation(clean(sentence), confidence=0.5)
+                if spotlight_entities:
+                    art_dict["dbpedia_entities"] = spotlight_entities
+                article_data[idx] = art_dict
 
     return split_data
 
 
+def annotate_agent_data(agent, dialog_data, tagger):
+    for idx, data in dialog_data[agent].items():
+        fun_facts = data.get("fun_facts")
+        if fun_facts:
+            facts = []
+            for fact in fun_facts:
+                fact_dict = {}
+                fact_dict["text"] = fact
+                spotlight_entities = tagger.get_spotlight_annotation(clean(fact), confidence=0.5)
+                if spotlight_entities:
+                    fact_dict["dbpedia_entities"] = spotlight_entities
+                facts.append(fact_dict)
+            data["fun_facts"] = facts
+
+        short_wiki = data.get("shortened_wiki_lead_section")
+        if short_wiki:
+            short = {}
+            short["text"] = short_wiki
+            spotlight_entities = tagger.get_spotlight_annotation(clean(short_wiki), confidence=0.5)
+            if spotlight_entities:
+                short["dbpedia_entities"] = spotlight_entities
+            data["shortened_wiki_lead_section"] = short
+
+        summarized_wiki = data.get("summarized_wiki_lead_section")
+        if summarized_wiki:
+            summ = {}
+            summ["text"] = summarized_wiki
+            spotlight_entities = tagger.get_spotlight_annotation(clean(summarized_wiki), confidence=0.5)
+            if spotlight_entities:
+                summ["dbpedia_entities"] = spotlight_entities
+            data["summarized_wiki_lead_section"] = summ
+
+
 def perform_spotlight_anno_knowledge(args):
     splits = [
-        # 'train',
-        # 'valid_freq',
-        # 'valid_rare',
+        'train',
+        'valid_freq',
+        'valid_rare',
         'test_freq',
-        # 'test_rare'
+        'test_rare'
     ]
     data_file_path = "alexa-prize-topical-chat-dataset"
 
