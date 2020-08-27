@@ -222,7 +222,7 @@ def generate_sentence_wise_output(model, tokenizer, dataset, example, args):
         token_type_ids = instance["token_type_ids"]
         expanded_tok_type_ids = token_type_ids
 
-        for j in range(args.max_length):  # Add trailing tokens
+        for j in range(args.max_length + len(output_so_far)):  # Add trailing tokens
             expanded_tok_type_ids.append(expanded_tok_type_ids[-1])
 
         for j in range(args.max_length):
