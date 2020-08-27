@@ -444,9 +444,9 @@ class TopicalChatsSentGenerationDataset(TopicalChatsDataset):
         num_sents = len(response)
         history = [h[0] for h in history]
         history, fact = self.truncate_sequences(history, self.tokenizer.encode(fact))
-        return [{"history": history, "num_sents": num_sents, "fact": self.tokenizer.decode(fact)}]
+        return [{"history": history, "plan": [self.tokenizer.decode(fact)] * num_sents}]
 
-    def prepare_generation_plan_for_sentence(self, history, fact, output_so_far, tokenizer):
+    def prepare_generation_plan_for_sentence(self, history, fact, tokenizer):
         bos, eos, end, speaker1, speaker2 = tokenizer.convert_tokens_to_ids((self.special_tokens[:-2]))
         segmented_history = []
         for i, history_turn in enumerate(history):
@@ -470,6 +470,40 @@ class TopicalChatsSentGenerationDataset(TopicalChatsDataset):
         instance["token_type_ids"] = [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence) for _ in s]
         return instance
 
+class TopicalChatsKDSentGenerationDataset(TopicalChatsKDDataset):
+
+    def __init__(self, dataset, tokenizer, special_tokens, args, inference=False):
+        super().__init__(dataset, tokenizer, special_tokens, args, inference)
+        self.nlp = spacy.load('en')
+
+    def __getitem__(self, index):
+        (history, (response, das, fact)) = self.dataset[index]
+        history = [h[0] for h in history]
+        history, fact = self.truncate_sequences(history, self.tokenizer.encode(fact))
+        uses_fact = "_nofact" if len(fact) <= 1 else "_fact"
+        fact = self.tokenizer.decode(fact)
+        plan = [(da + fact + uses_fact) for da in das]
+        return [{"history": history, "plan": plan}]
+
+    def prepare_generation_plan_for_sentence(self, history, fact, tokenizer):
+        bos, eos, end, speaker1, speaker2 = tokenizer.convert_tokens_to_ids((self.special_tokens[:-2]))
+        segmented_history = []
+        for i, history_turn in enumerate(history):
+            # interleave end of sentence markers between segments
+            segments = list(chain.from_iterable(
+                [tokenizer.encode(turn_segment) + [end] for turn_segment in history_turn[:-1]] + [
+                    tokenizer.encode(history_turn[-1])]
+            ))
+
+            segmented_history.append(segments)
+        sequence = [[bos] + tokenizer.encode(fact)] + segmented_history + [[]]
+        sequence = [sequence[0]] + [[speaker2 if (len(sequence) - i) % 2 else speaker1] + s for i, s in
+                                        enumerate(sequence[1:])]
+
+        instance = {}
+        instance["input_ids"] = list(chain(*sequence))
+        instance["token_type_ids"] = [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence) for _ in s]
+        return instance
 
 class TopicalChatsSWBDDataset(TopicalChatsDataset):
 

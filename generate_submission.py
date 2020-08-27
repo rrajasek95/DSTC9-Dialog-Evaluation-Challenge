@@ -11,7 +11,7 @@ from transformers import OpenAIGPTTokenizer, GPT2Tokenizer, OpenAIGPTDoubleHeads
 
 from gpt2 import GPT2DoubleHeadsModel
 from tc_dataset import TopicalChatsDataset, TopicalChatsKDDataset, TopicalChatsSWBDDataset, \
-    TopicalChatsSentimentDataset, TopicalChatsSentGenerationDataset
+    TopicalChatsSentimentDataset, TopicalChatsSentGenerationDataset, TopicalChatsKDSentGenerationDataset
 from train_util.decode import top_filtering
 from utils import get_dataset, augmented_tc_dataset, get_dataset_sentence_generation
 import torch.nn.functional as F
@@ -169,8 +169,10 @@ def get_sentence_loader(args, tokenizer):
         if split != args.split:
             del topical_chat[split]
 
-
-    dataset = TopicalChatsSentGenerationDataset(topical_chat[args.split], tokenizer, SPECIAL_TOKENS, args)
+    if args.training_configuration == "baseline":
+        dataset = TopicalChatsSentGenerationDataset(topical_chat[args.split], tokenizer, SPECIAL_TOKENS, args)
+    else:
+        dataset = TopicalChatsKDSentGenerationDataset(topical_chat[args.split], tokenizer, SPECIAL_TOKENS, args)
     sampler = torch.utils.data.distributed.DistributedSampler(dataset) if args.distributed else None
     loader = DataLoader(dataset, sampler=sampler, batch_size=args.valid_batch_size,
                               collate_fn=lambda x: collate_sent_batch_elements(x),
@@ -210,11 +212,11 @@ def get_loader(args, tokenizer):
 
 def generate_sentence_wise_output(model, tokenizer, dataset, example, args):
     special_tokens_ids = tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS)
-    num_turns = example["num_sents"]
+
     output_so_far = []
 
-    for i in range(num_turns):
-        instance = dataset.prepare_generation_plan_for_sentence(example["history"], example["fact"], output_so_far, tokenizer)
+    for i, plan in enumerate(example["plan"]):
+        instance = dataset.prepare_generation_plan_for_sentence(example["history"], plan, tokenizer)
 
         input_ids = instance["input_ids"]
         token_type_ids = instance["token_type_ids"]
@@ -226,8 +228,8 @@ def generate_sentence_wise_output(model, tokenizer, dataset, example, args):
         for j in range(args.max_length):
             inp = input_ids + output_so_far
             input_ids_t = torch.tensor(inp)
-            token_type_ids_t = torch.tensor(expanded_tok_type_ids[:input_ids_t.shape[-1]])
-            logits = model(input_ids_t.to(args.device), token_type_ids=token_type_ids_t.to(args.device))
+            token_type_ids_t = torch.tensor(expanded_tok_type_ids)[:input_ids_t.shape[-1]]
+            logits = model(input_ids=input_ids_t.to(args.device), token_type_ids=token_type_ids_t.to(args.device))
             if isinstance(logits, tuple) or len(logits.shape) == 4:
                 logits = logits[0].unsqueeze(0)
 
@@ -269,6 +271,7 @@ def generate_submissions_sent(args):
         example = batch[0][0]
 
         output = generate_sentence_wise_output(model, tokenizer, dataset, example, args)
+        print(output)
         outputs.append(output + "\n")
 
     save_outputs_and_plan([], args, outputs)

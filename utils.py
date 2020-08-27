@@ -79,7 +79,7 @@ def load_data_for_sentence_generation(dataset_path, split, training_configuratio
                       range(len(history_da))]
         history_knowledge = itertools.repeat(itertools.repeat(""))
         # history_knowledge = [l.strip().split("_eos")[:-1] for l in open(path_prefix + ".src.fct")]
-        resp_da = [transform_da(l.strip()) for l in open(history_resp_file).readlines()]
+        resp_da = [transform_da(l.strip()).split(" ") for l in open(history_resp_file).readlines()]
     else:
         history_da = itertools.repeat(itertools.repeat(None))
         history_knowledge = itertools.repeat(itertools.repeat(None))
