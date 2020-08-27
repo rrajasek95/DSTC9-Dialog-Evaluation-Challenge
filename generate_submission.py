@@ -271,7 +271,8 @@ def generate_submissions_sent(args):
         example = batch[0][0]
 
         output = generate_sentence_wise_output(model, tokenizer, dataset, example, args)
-        print(output)
+        if i % args.log_every_n == 0:
+            logger.info(output)
         outputs.append(output + "\n")
 
     save_outputs_and_plan([], args, outputs)
