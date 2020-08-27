@@ -516,7 +516,7 @@ def train():
 
 
     # Save configuration
-    # save_model_config(model, tokenizer, args)
+    save_model_config(model, tokenizer, args)
     # save_model(model, 'test_checkpoint', args)
     run_training(model, optimizer, scheduler, loaders, tokenizer, writer, args)
 
