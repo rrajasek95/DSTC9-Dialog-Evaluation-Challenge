@@ -2,6 +2,7 @@ import pickle
 from itertools import chain
 import random
 
+import spacy
 from torch.utils.data import Dataset
 
 from pd_nrg.policies import KnowledgeDependent, KnowledgeIndependentSWBDPolicy
@@ -431,6 +432,43 @@ class TopicalChatsKDSentDataset(TopicalChatsDatasetSent):
             instances.append(instance)
 
         return instances
+
+class TopicalChatsSentGenerationDataset(TopicalChatsDataset):
+
+    def __init__(self, dataset, tokenizer, special_tokens, args):
+        super().__init__(dataset, tokenizer, special_tokens, args)
+        self.nlp = spacy.load('en')
+
+    def __getitem__(self, index):
+        (history, (response, _, fact)) = self.dataset[index]
+        num_sents = len(response)
+        history = [h[0] for h in history]
+        history, fact = self.truncate_sequences(history, self.tokenizer.encode(fact))
+        return [{"history": history, "num_sents": num_sents, "fact": self.tokenizer.decode(fact)}]
+
+    def prepare_generation_plan_for_sentence(self, history, fact, output_so_far, tokenizer):
+        bos, eos, end, speaker1, speaker2 = tokenizer.convert_tokens_to_ids((self.special_tokens[:-2]))
+        segmented_history = []
+        for i, history_turn in enumerate(history):
+            # interleave end of sentence markers between segments
+            segments = list(chain.from_iterable(
+                [tokenizer.encode(turn_segment) + [end] for turn_segment in history_turn[:-1]] + [
+                    tokenizer.encode(history_turn[-1])]
+            ))
+
+            segmented_history.append(segments)
+
+
+
+        sequence = [[bos] + tokenizer.encode(fact)] + segmented_history + [[]]
+        sequence = [sequence[0]] + [[speaker2 if (len(sequence) - i) % 2 else speaker1] + s for i, s in
+                                        enumerate(sequence[1:])]
+
+        instance = {}
+        instance["input_ids"] = list(chain(*sequence))
+
+        instance["token_type_ids"] = [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence) for _ in s]
+        return instance
 
 
 class TopicalChatsSWBDDataset(TopicalChatsDataset):

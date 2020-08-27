@@ -10,9 +10,10 @@ from tqdm.auto import tqdm
 from transformers import OpenAIGPTTokenizer, GPT2Tokenizer, OpenAIGPTDoubleHeadsModel
 
 from gpt2 import GPT2DoubleHeadsModel
-from tc_dataset import TopicalChatsDataset, TopicalChatsKDDataset, TopicalChatsSWBDDataset, TopicalChatsSentimentDataset
+from tc_dataset import TopicalChatsDataset, TopicalChatsKDDataset, TopicalChatsSWBDDataset, \
+    TopicalChatsSentimentDataset, TopicalChatsSentGenerationDataset
 from train_util.decode import top_filtering
-from utils import get_dataset, augmented_tc_dataset
+from utils import get_dataset, augmented_tc_dataset, get_dataset_sentence_generation
 import torch.nn.functional as F
 import os
 
@@ -30,7 +31,7 @@ This part is for my master's project - Rishi
 logger = logging.getLogger(__file__)
 
 ADDITIONAL_TOKENS = ["_nofact"]
-SPECIAL_TOKENS = ["<bos>", "<eos>", "<speaker1>", "<speaker2>", "<pad>"]
+SPECIAL_TOKENS = ["<bos>", "<eos>", "<end>", "<speaker1>", "<speaker2>", "<pad>", "<eot>"]  # added <end>, to represent the end of sent
 
 ATTR_TO_SPECIAL_TOKEN = {
     'bos_token': '<bos>',
@@ -96,6 +97,18 @@ def pad_dataset(dataset, padding=0):
         dataset[name] = [x + [padding if name != "lm_labels" or name != "das_to_return" else -100] * (max_l - len(x)) for x in dataset[name]]
     return dataset
 
+def collate_sent_batch_elements(batch):
+
+    batch_inputs = defaultdict(list)
+    chained_batch = chain(*batch)
+
+    for instance in chained_batch:
+        for field, data in instance.items():
+            batch_inputs[field].append(data)
+
+    return batch
+
+
 def collate_batch_elements(batch, tokenizer, args):
     """
     Topical chats is a ridiculously large dataset (2GB+ including facts/reading set).
@@ -144,6 +157,27 @@ def collate_batch_elements(batch, tokenizer, args):
         tensorized_input.append(tensor)
     return tensorized_input
 
+def get_sentence_loader(args, tokenizer):
+    if args.dataset_configuration == "dstc9":
+        topical_chat = get_dataset_sentence_generation(tokenizer, args.dataset_path, args.dataset_cache, args.training_configuration)
+    else:
+        topical_chat = augmented_tc_dataset(tokenizer, args.dataset_path, args.dataset_cache,
+                                            args.knowledge_index_path, args.training_configuration, args.knowledge_policy)
+
+    splits = list(topical_chat.keys())
+    for split in splits:
+        if split != args.split:
+            del topical_chat[split]
+
+
+    dataset = TopicalChatsSentGenerationDataset(topical_chat[args.split], tokenizer, SPECIAL_TOKENS, args)
+    sampler = torch.utils.data.distributed.DistributedSampler(dataset) if args.distributed else None
+    loader = DataLoader(dataset, sampler=sampler, batch_size=args.valid_batch_size,
+                              collate_fn=lambda x: collate_sent_batch_elements(x),
+                              shuffle=False)
+
+    return loader, sampler, dataset
+
 def get_loader(args, tokenizer):
     if args.dataset_configuration == "dstc9":
         topical_chat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache, args.training_configuration)
@@ -172,6 +206,73 @@ def get_loader(args, tokenizer):
                               shuffle=False)
 
     return loader, sampler, dataset
+
+
+def generate_sentence_wise_output(model, tokenizer, dataset, example, args):
+    special_tokens_ids = tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS)
+    num_turns = example["num_sents"]
+    output_so_far = []
+
+    for i in range(num_turns):
+        instance = dataset.prepare_generation_plan_for_sentence(example["history"], example["fact"], output_so_far, tokenizer)
+
+        input_ids = instance["input_ids"]
+        token_type_ids = instance["token_type_ids"]
+        expanded_tok_type_ids = token_type_ids
+
+        for j in range(args.max_length):  # Add trailing tokens
+            expanded_tok_type_ids.append(expanded_tok_type_ids[-1])
+
+        for j in range(args.max_length):
+            inp = input_ids + output_so_far
+            input_ids_t = torch.tensor(inp)
+            token_type_ids_t = torch.tensor(expanded_tok_type_ids[:input_ids_t.shape[-1]])
+            logits = model(input_ids_t.to(args.device), token_type_ids=token_type_ids_t.to(args.device))
+            if isinstance(logits, tuple) or len(logits.shape) == 4:
+                logits = logits[0].unsqueeze(0)
+
+            logits = logits[0, -1, :] / args.temperature
+            logits = top_filtering(logits, top_k=args.top_k, top_p=args.top_p)
+            probs = F.softmax(logits, dim=-1)
+
+
+            prev = torch.topk(probs, 1)[1] if args.no_sample else torch.multinomial(probs, 1)
+            if prev.item() in special_tokens_ids:
+                while prev.item() in special_tokens_ids:
+                    if probs.max().item() == 1:
+                        # Disabled this rather noisy warning
+                        # logger.warn("Warning: model generating special token with probability 1.")
+                        break  # avoid infinitely looping over special token
+                    prev = torch.multinomial(probs, num_samples=1)
+            if prev.item() in special_tokens_ids:
+                break
+            output_so_far.append(prev.item())
+        output_so_far.append(special_tokens_ids[2])
+
+    return tokenizer.decode(output_so_far, skip_special_tokens=True)
+
+
+
+def generate_submissions_sent(args):
+    tokenizer_class = GPT2Tokenizer
+
+    tokenizer = tokenizer_class.from_pretrained(args.model_metadata_path)
+
+    data = torch.load(args.model_checkpoint + '/pytorch_model.bin')
+    model = data["mymodel"]
+    model.to(args.device)
+
+    outputs = []
+    loader, sampler, dataset = get_sentence_loader(args, tokenizer)
+    for i, batch in tqdm(enumerate(loader)):
+
+        example = batch[0][0]
+
+        output = generate_sentence_wise_output(model, tokenizer, dataset, example, args)
+        outputs.append(output + "\n")
+
+    save_outputs_and_plan([], args, outputs)
+
 
 def generate_submissions(args):
 
@@ -253,6 +354,8 @@ if __name__ == '__main__':
     parser.add_argument('--dataset_configuration', type=str, default="topical-chats",
                         help="Configuration of dataset to load for training",
                         choices=["dstc9", "topical-chats"])
+    parser.add_argument('--generation_configuration', type=str, default='turn',
+                        choices=['turn', 'sentence'])
     parser.add_argument('--heuristic_policy', action='store_true',
                         help="Enable heuristic dialog policy for generation (as opposed to using ground truth)")
     parser.add_argument('--knowledge_index_path', type=str, default="./tc_processed/knowledge_index.pkl",
@@ -296,4 +399,7 @@ if __name__ == '__main__':
                    args.local_rank)  # This is a logger.warning: it will be printed by all distributed processes
     logger.info("Arguments: %s", pformat(args))
 
-    generate_submissions(args)
+    if args.generation_configuration == "turn":
+        generate_submissions(args)
+    else:
+        generate_submissions_sent(args)
