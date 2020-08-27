@@ -249,6 +249,8 @@ def generate_sentence_wise_output(model, tokenizer, dataset, example, args):
             if prev.item() in special_tokens_ids:
                 break
             output_so_far.append(prev.item())
+        if len(output_so_far) >= args.max_length:
+            break
         output_so_far.append(special_tokens_ids[2])
 
     return tokenizer.decode(output_so_far, skip_special_tokens=True)
