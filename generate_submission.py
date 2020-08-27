@@ -268,14 +268,15 @@ def generate_submissions_sent(args):
 
     outputs = []
     loader, sampler, dataset = get_sentence_loader(args, tokenizer)
-    for i, batch in tqdm(enumerate(loader)):
+    with torch.no_grad():
+        for i, batch in tqdm(enumerate(loader)):
 
-        example = batch[0][0]
+            example = batch[0][0]
 
-        output = generate_sentence_wise_output(model, tokenizer, dataset, example, args)
-        if i % args.log_every_n == 0:
-            logger.info(output)
-        outputs.append(output + "\n")
+            output = generate_sentence_wise_output(model, tokenizer, dataset, example, args)
+            if i % args.log_every_n == 0:
+                logger.info(output)
+            outputs.append(output + "\n")
 
     save_outputs_and_plan([], args, outputs)
 
