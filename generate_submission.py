@@ -31,7 +31,7 @@ This part is for my master's project - Rishi
 logger = logging.getLogger(__file__)
 
 ADDITIONAL_TOKENS = ["_nofact"]
-SPECIAL_TOKENS = ["<bos>", "<eos>", "<end>", "<speaker1>", "<speaker2>", "<pad>", "<eot>"]  # added <end>, to represent the end of sent
+SPECIAL_TOKENS = ["<bos>", "<eos>", "<speaker1>", "<speaker2>", "<end>", "<pad>", "<eot>"]  # added <end>, to represent the end of sent
 
 ATTR_TO_SPECIAL_TOKEN = {
     'bos_token': '<bos>',
@@ -133,7 +133,7 @@ def collate_batch_elements(batch, tokenizer, args):
         for field, data in instance.items():
             batch_inputs[field].append(data)
 
-    padded_dataset = pad_dataset(batch_inputs, padding=tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS[-1]))
+    padded_dataset = pad_dataset(batch_inputs, padding=tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS[-2]))
 
     tensorized_input = []
     # Verify input sent the same way:

@@ -62,7 +62,7 @@ class TopicalChatsDataset(Dataset):
         return candidates
 
     def build_input_from_segments(self, history, response, fact, tokenizer, lm_labels=False):
-        bos, eos, speaker1, speaker2 = tokenizer.convert_tokens_to_ids((self.special_tokens[:-1]))
+        bos, eos, speaker1, speaker2 = tokenizer.convert_tokens_to_ids((self.special_tokens[:4]))
 
         """
         Input construction (may change):
@@ -155,7 +155,7 @@ class TopicalChatsDatasetSent(Dataset):
         return candidates
 
     def build_input_from_segments(self, history, response, fact, tokenizer, lm_labels=False):
-        bos, eos, end, speaker1, speaker2 = tokenizer.convert_tokens_to_ids((self.special_tokens[:-2]))
+        bos, eos, speaker1, speaker2, end = tokenizer.convert_tokens_to_ids((self.special_tokens[:-2]))
         eot = tokenizer.convert_tokens_to_ids((self.special_tokens[-1]))
         """
         Input construction (may change):
@@ -447,7 +447,7 @@ class TopicalChatsSentGenerationDataset(TopicalChatsDataset):
         return [{"history": history, "plan": [self.tokenizer.decode(fact)] * num_sents}]
 
     def prepare_generation_plan_for_sentence(self, history, fact, tokenizer):
-        bos, eos, end, speaker1, speaker2 = tokenizer.convert_tokens_to_ids((self.special_tokens[:-2]))
+        bos, eos, speaker1, speaker2, end = tokenizer.convert_tokens_to_ids((self.special_tokens[:-2]))
         segmented_history = []
         for i, history_turn in enumerate(history):
             # interleave end of sentence markers between segments
@@ -486,7 +486,7 @@ class TopicalChatsKDSentGenerationDataset(TopicalChatsKDDataset):
         return [{"history": history, "plan": plan}]
 
     def prepare_generation_plan_for_sentence(self, history, fact, tokenizer):
-        bos, eos, end, speaker1, speaker2 = tokenizer.convert_tokens_to_ids((self.special_tokens[:-2]))
+        bos, eos, speaker1, speaker2, end = tokenizer.convert_tokens_to_ids((self.special_tokens[:-2]))
         segmented_history = []
         for i, history_turn in enumerate(history):
             # interleave end of sentence markers between segments
