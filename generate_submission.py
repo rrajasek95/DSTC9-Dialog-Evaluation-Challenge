@@ -185,7 +185,7 @@ def get_sentence_loader(args, tokenizer):
 
 def get_loader(args, tokenizer):
     if args.dataset_configuration == "dstc9":
-        topical_chat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache, args.training_configuration)
+        topical_chat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache, args.training_configuration, args.generation_configuration)
     else:
         topical_chat = augmented_tc_dataset(tokenizer, args.dataset_path, args.dataset_cache,
                                             args.knowledge_index_path, args.training_configuration, args.knowledge_policy)
