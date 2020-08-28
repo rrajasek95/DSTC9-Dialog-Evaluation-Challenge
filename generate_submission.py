@@ -61,7 +61,7 @@ def decode_sequences(input_ids, token_type_ids, model, tokenizer, args):
         for j in range(args.max_length):  # Add trailing tokens
             expanded_tok_type_ids.append(expanded_tok_type_ids[-1])
         expanded_tok_type_ids = torch.tensor(expanded_tok_type_ids).to(args.device)
-
+        patience = 10
         for j in range(args.max_length):
             prefix_input_seq = torch.tensor(tokenizer.encode(context) + current_output).unsqueeze(0)
             truncated_tok_type_ids = expanded_tok_type_ids[:prefix_input_seq.shape[-1]].unsqueeze(0)
@@ -86,7 +86,8 @@ def decode_sequences(input_ids, token_type_ids, model, tokenizer, args):
             if prev.item() in special_tokens_ids:
                 break
             current_output.append(prev.item())
-
+        if patience == 0:
+            break
 
         output = tokenizer.decode(current_output)
         outputs.append(output.replace('\n', '') + '\n')
