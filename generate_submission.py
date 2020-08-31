@@ -86,8 +86,6 @@ def decode_sequences(input_ids, token_type_ids, model, tokenizer, args):
             if prev.item() in special_tokens_ids:
                 break
             current_output.append(prev.item())
-        if patience == 0:
-            break
 
         output = tokenizer.decode(current_output)
         outputs.append(output.replace('\n', '') + '\n')
