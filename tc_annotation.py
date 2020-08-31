@@ -11,6 +11,9 @@ from flair.data import Sentence
 from flair.models import SequenceTagger
 from nltk import word_tokenize
 from tqdm.auto import tqdm
+import neuralcoref
+from spacy.tokenizer import Tokenizer
+
 
 from annotators.spotlight import SpotlightTagger
 from annotators.vader import VaderSentimentTagger
@@ -230,7 +233,6 @@ def perform_flair_enhanced_anno(args):
 
 def spotlight_annotate(tagger, split_data):
     for conv_id, dialog_data in tqdm(split_data.items()):
-
         for turn in dialog_data["content"]:
 
             message = turn["message"]
@@ -358,7 +360,6 @@ def spotlight_annotate_knowledge(tagger, split_data):
                         art_dict["dbpedia_entities"] = spotlight_entities
                     article_data[idx] = art_dict
 
-    return split_data
 
 
 def perform_spotlight_anno_knowledge(args):
@@ -505,6 +506,132 @@ def partition_training_conversations(data_dir, num_splits=16):
                 for lines in conversations:
                     split_file.writelines(lines)
 
+def perform_coref_anno(args):
+    data_dir = os.path.join(
+        args.data_dir,
+        'tc_processed'
+    )
+    nlp = spacy.load('en_core_web_lg')
+    coref = neuralcoref.NeuralCoref(nlp.vocab)
+    nlp.add_pipe(coref, name='neuralcoref')
+
+    splits = [
+        # 'train',
+        # 'valid_freq',
+        # 'valid_rare',
+        'test_freq',
+        # 'test_rare'
+    ]
+
+    for split in splits:
+        with open(os.path.join(data_dir, split + '_anno.json'), 'r') as data_file:
+            split_data = json.load(data_file)
+
+        annotated_split = coref_anno(nlp, split_data)
+
+        with open(os.path.join(data_dir, split + '_anno_coref_large.json'), 'w') as annotated_file:
+            json.dump(annotated_split, annotated_file)
+
+
+def coref_anno(nlp, split_data):
+    for conv_id, dialog_data in tqdm(split_data.items()):
+        messages = ""
+        # end of turn span, non inclusive
+        spans = []
+        spanEnd = -1
+        for turn in dialog_data["content"]:
+            messages += turn["message"] + " "
+            spanEnd += len(turn["message"]) + 1
+            spans.append(spanEnd)
+
+
+        messages = messages.strip()
+        doc = nlp(messages)
+        if doc._.has_coref:
+            corefs = []
+            for coref in doc._.coref_clusters:
+                coref_dict = {}
+                coref_dict["main"] = coref.main.string
+                start_char_main = coref.main.start_char
+                end_char_main = coref.main.end_char
+                main_turn = find_span_turn(start_char_main, end_char_main, spans)
+                # TODO: BUG!! This should not happen but some annotators didn't use punctuation
+                # So coref marks entities across different turns and that's a problem and annoying
+                if main_turn is None:
+                    continue
+                coref_dict["turn"] = main_turn
+
+                turn_start = 0
+                if main_turn != 1:
+                    turn_start = spans[main_turn - 2]
+                # coref_dict["span_within_turn_start"] = start_char_main - turn_start - 1
+                # coref_dict["span_within_turn_end"] = end_char_main - turn_start - 1
+
+                start_turn_span = start_char_main - turn_start - 1
+                end_turn_span = end_char_main - turn_start - 1
+                doc_turn = nlp(dialog_data["content"][main_turn - 1]["message"])
+                start_mes_span = 0
+                index = 0
+                for sent in doc_turn.sents:
+                    if end_turn_span < start_mes_span + sent.end_char:
+                        coref_dict["segment"] = index + 1
+                        if index > 0:
+                            coref_dict["span_within_segment_start"] = start_turn_span - start_mes_span - 1
+                            coref_dict["span_within_segment_end"] = end_turn_span - start_mes_span - 1
+                        else:
+                            coref_dict["span_within_segment_start"] = start_turn_span - start_mes_span
+                            coref_dict["span_within_segment_end"] = end_turn_span - start_mes_span
+                        break
+                    start_mes_span = sent.end_char
+                    index += 1
+
+                single_refs = []
+                for i in range(1, len(coref.mentions)):
+                    single_dict = {}
+                    single_dict["text"] = coref.mentions[i].string
+                    ref_turn = find_span_turn(coref.mentions[i].start_char, coref.mentions[i].end_char, spans)
+                    # TODO: BUG!! This should not happen but some annotators didn't use punctuation
+                    # So coref marks entities across different turns and that's a problem and annoying
+                    if ref_turn is None:
+                        continue
+                    single_dict["turn"] = ref_turn
+
+
+                    turn_start_ref = 0
+                    if ref_turn != 1:
+                        turn_start_ref = spans[ref_turn - 2]
+                    start_ref_turn_span = coref.mentions[i].start_char - turn_start_ref - 1
+                    end_ref_turn_span = coref.mentions[i].end_char - turn_start_ref - 1
+                    doc_turn_ref = nlp(dialog_data["content"][ref_turn - 1]["message"])
+                    start_mes_span_ref = 0
+                    index = 0
+                    for sent in doc_turn_ref.sents:
+                        if end_ref_turn_span < start_mes_span_ref + sent.end_char:
+                            single_dict["segment"] = index + 1
+                            if index > 0:
+                                single_dict["span_within_segment_start"] = start_ref_turn_span - start_mes_span_ref - 1
+                                single_dict["span_within_segment_end"] = end_ref_turn_span - start_mes_span_ref - 1
+                            else:
+                                single_dict["span_within_segment_start"] = start_ref_turn_span - start_mes_span_ref
+                                single_dict["span_within_segment_end"] = end_ref_turn_span - start_mes_span_ref
+                            break
+                        start_mes_span_ref = sent.end_char
+                        index += 1
+                    single_refs.append(single_dict)
+                coref_dict["references"] = single_refs
+                corefs.append(coref_dict)
+            split_data[conv_id]["corefs"] = corefs
+
+    return split_data
+
+
+def find_span_turn(start_char, end_char, spans_array):
+    start = 0
+    for j in range(len(spans_array)):
+        if start_char >= start and end_char < spans_array[j]:
+            return j + 1
+        start = spans_array[j]
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -518,8 +645,8 @@ if __name__ == '__main__':
     # perform_vader_annotation(args, True)
 
     # perform_spotlight_anno(args)
-    perform_spotlight_anno_knowledge(args)
-
+    # perform_spotlight_anno_knowledge(args)
+    perform_coref_anno(args)
     # try:
     #     perform_flair_enhanced_anno(args)
     # except:
