@@ -167,13 +167,15 @@ def analyze_split_knowledge_entitylinking(split_reading_set):
 
 
     wiki_lead_dataframe = pd.DataFrame(list(entity_wiki_lead_section_data.values()), columns=[
-            "entity", "text", "num_entities", "normalized_entities", "surface_forms",
+            "entity", "text", "num_entities", "normalized_entities", "num_unique_entities",
+            "unique_normalized_entities", "surface_forms",
             "entity_types", "contains_person", "contains_org", "contains_place",
             "contains_work", "contains_animal"])
 
     summarized_wiki_dataframe = pd.DataFrame(list(entity_summarized_wiki_data.values()),
                                              columns=[
                                                  "entity", "text", "num_entities", "normalized_entities",
+                                                 "num_unique_entities", "unique_normalized_entities",
                                                  "surface_forms", "entity_types",
                                                  "contains_person", "contains_org", "contains_place",
                                                  "contains_work", "contains_animal"
@@ -181,6 +183,7 @@ def analyze_split_knowledge_entitylinking(split_reading_set):
     fun_fact_dataframe = pd.DataFrame(list(fun_fact_entity_map.values()),
                                       columns=[
                                           "entity", "text", "num_entities", "normalized_entities",
+                                          "num_unique_entities", "unique_normalized_entities",
                                           "surface_forms", "entity_types",
                                           "contains_person", "contains_org", "contains_place",
                                           "contains_work", "contains_animal"
@@ -188,6 +191,7 @@ def analyze_split_knowledge_entitylinking(split_reading_set):
     article_dataframe = pd.DataFrame(list(article_sentence_entity_map.values()),
                                      columns=[
                                          "url", "text", "num_entities", "normalized_entities",
+                                         "num_unique_entities", "unique_normalized_entities",
                                          "surface_forms", "entity_types",
                                          "contains_person", "contains_org", "contains_place",
                                          "contains_work", "contains_animal"
@@ -207,9 +211,11 @@ def extract_entity_info(item):
     work_detected = any("Work" in e["entity_type_dbpedia"] for e in entities if e["entity_type_dbpedia"])
     animal_detected = any("Animal" in e["entity_type_dbpedia"] for e in entities if e["entity_type_dbpedia"])
 
-
+    unique_entities = set(normed_entities)
     return {
         "num_entities": len(entities),
+        "num_unique_entities": len(unique_entities),
+        "unique_normalized_entities": unique_entities,
         "normalized_entities": normed_entities,
         "surface_forms": surface_forms,
         "entity_types": entity_types,
