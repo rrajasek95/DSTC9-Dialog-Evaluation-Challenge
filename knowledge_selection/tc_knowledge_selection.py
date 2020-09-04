@@ -20,28 +20,7 @@ def generate_knowledge_selections(test_freq_conversations, test_freq_reading_set
 
     turn_knowledge = []
     for conv_id, conv_data in test_freq_conversations.items():
-        conv_reading_set = test_freq_reading_set[conv_id]
-        fact_set_1 = set(extract_fact_set(conv_reading_set["agent_1"]))
-        fact_set_2 = set(extract_fact_set(conv_reading_set["agent_2"]))
-
-        article_data = conv_reading_set["article"]
-
-        article_indices = ['AS1', 'AS2', 'AS3', 'AS4']
-
-        common_knowledge_set = set()
-        if "AS1" in article_data:
-            for idx in article_indices:
-                sentence = article_data[idx]
-                if len(word_tokenize(sentence)) < 5:
-                    continue
-                common_knowledge_set.add(clean(sentence))
-        fact_set_1.update(common_knowledge_set)
-        fact_set_2.update(common_knowledge_set)
-
-        agent_knowledge = {
-            "agent_1": list(fact_set_1),
-            "agent_2": list(fact_set_2)
-        }
+        agent_knowledge = get_conversation_knowledge(conv_id, test_freq_reading_set)
 
         for i, turn in enumerate(conv_data["content"]):
             text = turn["message"]
@@ -95,16 +74,30 @@ def generate_knowledge_selections(test_freq_conversations, test_freq_reading_set
     ))
 
 
+def get_conversation_knowledge(conv_id, test_freq_reading_set):
+    conv_reading_set = test_freq_reading_set[conv_id]
+    fact_set_1 = set(extract_fact_set(conv_reading_set["agent_1"]))
+    fact_set_2 = set(extract_fact_set(conv_reading_set["agent_2"]))
+    article_data = conv_reading_set["article"]
+    article_indices = ['AS1', 'AS2', 'AS3', 'AS4']
+    common_knowledge_set = set()
+    if "AS1" in article_data:
+        for idx in article_indices:
+            sentence = article_data[idx]
+            if len(word_tokenize(sentence)) < 5:
+                continue
+            common_knowledge_set.add(clean(sentence))
+    fact_set_1.update(common_knowledge_set)
+    fact_set_2.update(common_knowledge_set)
+    agent_knowledge = {
+        "agent_1": list(fact_set_1),
+        "agent_2": list(fact_set_2)
+    }
+    return agent_knowledge
+
+
 def generate_knowledge_infersent(test_freq_conversations, test_freq_reading_set, vectorizer):
-    V = 2
-    MODEL_PATH = 'encoder/infersent%s.pkl' % V
-    params_model = {'bsize': 64, 'word_emb_dim': 300, 'enc_lstm_dim': 2048,
-                    'pool_type': 'max', 'dpout_model': 0.0, 'version': V}
-    infersent = InferSent(params_model)
-    infersent.load_state_dict(torch.load(MODEL_PATH))
-    W2V_PATH = 'fastText/crawl-300d-2M.vec'
-    infersent.set_w2v_path(W2V_PATH)
-    infersent.build_vocab_k_words(K=100000)
+    infersent = load_infersent_model()
     turn_knowledge = []
 
     for conv_id, conv_data in test_freq_conversations.items():
@@ -150,6 +143,20 @@ def generate_knowledge_infersent(test_freq_conversations, test_freq_reading_set,
         'tc_processed',
         'test_freq_infersent_group_3_articles.csv'
     ))
+
+
+def load_infersent_model():
+    V = 2
+    MODEL_PATH = 'encoder/infersent%s.pkl' % V
+    params_model = {'bsize': 64, 'word_emb_dim': 300, 'enc_lstm_dim': 2048,
+                    'pool_type': 'max', 'dpout_model': 0.0, 'version': V}
+    infersent = InferSent(params_model)
+    infersent.load_state_dict(torch.load(MODEL_PATH))
+    W2V_PATH = 'fastText/crawl-300d-2M.vec'
+    infersent.set_w2v_path(W2V_PATH)
+    infersent.build_vocab_k_words(K=100000)
+    return infersent
+
 
 def generate_knowledge_bert(test_freq_conversations, test_freq_reading_set, vectorizer):
     model = SentenceTransformer('bert-base-nli-stsb-mean-tokens')
@@ -248,67 +255,86 @@ def generate_knowledge_bert_sent(test_freq_conversations, test_freq_reading_set,
         'test_freq_bert_sentences.csv'
     ))
 
+def load_test_freq_data(args):
+    test_freq_reading_set_path = os.path.join(
+        args.reading_set_path,
+        'test_freq.json'
+    )
+
+    test_freq_conversations_path = os.path.join(
+        args.conversations_path,
+        'test_freq.json'
+    )
+
+    with open(test_freq_conversations_path, 'r') as test_freq_conv_f:
+        test_freq_conversations = json.load(test_freq_conv_f)
+
+    with open(test_freq_reading_set_path, 'r') as test_freq_reading_set_file:
+        test_freq_reading_set = json.load(test_freq_reading_set_file)
+
+    return test_freq_conversations, test_freq_reading_set
+
+
+def load_infersent_knowledge_index(args):
+    with open(args.knowledge_index_path, 'rb') as knowledge_index_file:
+        index_dict = pickle.load(knowledge_index_file)
+        vectorizer = index_dict["knowledge_vecs"]
+
+    return vectorizer
+
+def load_bert_knowledge_index(args):
+    with open(args.knowledge_index_path, 'rb') as knowledge_index_file:
+        index_dict = pickle.load(knowledge_index_file)
+        vectorizer = index_dict["knowledge_vecs"]
+
+    return vectorizer
+
+def load_tfidf_knowledge_index(args):
+    with open(args.knowledge_index_path, 'rb') as knowledge_index_file:
+        index_dict = pickle.load(knowledge_index_file)
+        vectorizer = index_dict["vectorizer"]
+
+    return vectorizer
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--knowledge_selection_policy", type=str, default="bert", choices=["tf_idf", "infersent", "bert"])
+    parser.add_argument('--conversations_path', type=str, default=
+                        os.path.join(
+                            'alexa-prize-topical-chat-dataset',
+                            'conversations'
+                        ))
+
+    parser.add_argument('--reading_set_path', type=str, default=
+                        os.path.join('alexa-prize-topical-chat-dataset',
+                                     'reading_sets',
+                                     'post-build'
+                                     ), help='Path to topical chats reading set JSON files')
+    parser.add_argument('--knowledge_index_path', type=str,
+                        default=os.path.join(
+                            'tc_processed',
+                            'tc_knowledge_index_facebook_test_freq_shortened_arts.pkl'
+                        ),
+                        help='Path to knowledge index file/folder')
+    parser.add_argument('--output_selection_path', type=str,
+                        default=os.path.join(
+                            'knowledge_selection',
+                            'processed_knowledge_selection'),
+                        help='Path to output file for match knowledge selections')
     args = parser.parse_args()
-    topical_chats_path = 'alexa-prize-topical-chat-dataset'
-    test_freq_reading_set_path = os.path.join(
-        topical_chats_path,
-        'reading_sets',
-        'post-build',
-        'test_freq.json'
-    )
 
     if args.knowledge_selection_policy == "infersent":
-        test_freq_conv_file = os.path.join(
-            "Topical_Chats",
-            'test_freq.json'
-        )
-        knowledge_index_path = os.path.join(
-            'tc_processed',
-            'tc_knowledge_index_facebook_test_freq_shortened_arts.pkl'
-        )
-
-        with open(knowledge_index_path, 'rb') as knowledge_index_file:
-            index_dict = pickle.load(knowledge_index_file)
-            vectorizer = index_dict["knowledge_vecs"]
+        vectorizer = load_infersent_knowledge_index(args)
     if args.knowledge_selection_policy == "bert":
-        test_freq_conv_file = os.path.join(
-            "Topical_Chats",
-            'test_freq.json'
-        )
-        knowledge_index_path = os.path.join(
-            'tc_processed',
-            'tc_knowledge_index_bert_test_freq.pkl'
-        )
-
-        with open(knowledge_index_path, 'rb') as knowledge_index_file:
-            index_dict = pickle.load(knowledge_index_file)
-            vectorizer = index_dict["knowledge_vecs"]
+        vectorizer = load_bert_knowledge_index(args)
     else:
-        test_freq_conv_file = os.path.join(
-            topical_chats_path,
-            'conversations',
-            'test_freq.json'
-        )
+        vectorizer = load_tfidf_knowledge_index(args)
 
-        knowledge_index_path = os.path.join(
-            'tc_processed',
-            'tc_knowledge_index.pkl'
-        )
 
-        with open(knowledge_index_path, 'rb') as knowledge_index_file:
-            index_dict = pickle.load(knowledge_index_file)
-            vectorizer = index_dict["vectorizer"]
 
-    with open(test_freq_conv_file, 'r') as test_freq_conv_f:
-        test_freq_conversations = json.load(test_freq_conv_f)
+    test_freq_conversations, test_freq_reading_set = load_test_freq_data(args)
 
-    with open(test_freq_reading_set_path, 'r') as test_freq_reading_set_file:
-        test_freq_reading_set = json.load(test_freq_reading_set_file)
     if args.knowledge_selection_policy == "tf_idf":
         generate_knowledge_selections(test_freq_conversations, test_freq_reading_set, vectorizer)
     elif args.knowledge_selection_policy == "infersent":
