@@ -17,6 +17,8 @@ import logging
 import math
 import os
 import random
+import torch_xla
+import torch_xla.core.xla_model as xm
 
 from collections import defaultdict
 from itertools import chain
@@ -434,8 +436,6 @@ def train():
                         help='Number of iterations to run before saving the model')
     # TODO: implement some mechanism to resume training. Need more sophisticated state management
 
-    parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu",
-                        help="Device (cuda or cpu)")
     parser.add_argument("--fp16", type=str, default="",
                         help="Set to O0, O1, O2 or O3 for fp16 training (see apex documentation)")
     parser.add_argument("--local_rank", type=int, default=-1,
@@ -474,7 +474,6 @@ def train():
     args.distributed = (args.local_rank != -1)
     if args.distributed:
         torch.cuda.set_device(args.local_rank)
-        args.device = torch.device("cuda", args.local_rank)
         torch.distributed.init_process_group(backend='nccl', init_method='env://')
 
     logger.info("Prepare datasets")
@@ -500,7 +499,7 @@ def train():
     # Add special tokens if they are not already added
     if num_added_tokens > 0:
         model.resize_token_embeddings(new_num_tokens=orig_num_tokens + num_added_tokens)
-
+    args.device = xm.xla_device()
     if args.parallel:
         # Setup data parallel version of the model to make
         # use of multi-GPU
