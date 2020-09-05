@@ -490,7 +490,7 @@ def augmented_tc_dataset(tokenizer, dataset_path, dataset_cache, knowledge_index
         dataset = {}
         for split in splits:
             if knowledge_policy == "bert_sentence":
-                process_split_sentence_knowledge(dataset_path, split, tokenizer, (vec, dialog_act), knowledge_policy)
+                dataset[split] = process_split_sentence_knowledge(dataset_path, split, tokenizer, (vec, dialog_act), knowledge_policy)
             else:
                 dataset[split] = process_split(dataset_path, split, tokenizer, (vec, dialog_act), knowledge_policy,
                                            sentiment=sentiment_flag)
