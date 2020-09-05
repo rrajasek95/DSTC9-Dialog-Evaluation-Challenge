@@ -289,6 +289,44 @@ def process_split(dataset_path, split, tokenizer, index, knowledge_policy, senti
     return data
 
 
+def process_split_sentence_knowledge(dataset_path, split, tokenizer, index, knowledge_policy):
+
+    bert_model = SentenceTransformer('bert-base-nli-stsb-mean-tokens')
+    vec, dialog_act = index
+    path_prefix = os.path.join(dataset_path, split)
+    reading_set_path = os.path.join(dataset_path, 'reading_sets', f'{split}.json')
+    data = []
+    with open(path_prefix + '_full_anno.json', 'r') as annotated_split_file, \
+            open(reading_set_path, 'r') as reading_set_file:
+        annotated_data = json.load(annotated_split_file)
+        reading_set = json.load(reading_set_file)
+        for conv_id, conv_data in tqdm(annotated_data.items()):
+            context = []
+
+            agent_knowledge, agent_mapping = prepare_reading_set_for_conversation(conv_id, reading_set)
+
+            for turn in conv_data["content"]:
+                da_index = 0
+                for segment in turn["segments"]:
+                    sentence = segment["text"]
+                    current_turn_data = prepare_sentence_knowledge_data(agent_mapping, conv_id, dialog_act, knowledge_policy,
+                                                                        sentence, tokenizer, da_index, turn, vec, bert_model)
+                    data.append((context, current_turn_data))
+                    context = context + [current_turn_data]
+                    da_index = da_index + 1
+
+    return data
+
+
+def prepare_sentence_knowledge_data(agent_mapping, conv_id, dialog_act, knowledge_policy,
+                      response, tokenizer, da_index, turn, vec, bert_model=None):
+
+    knowledge_sentence = bert_knowledge_selection(conv_id, response, vec, bert_model)
+    original_knowledge_sentence = agent_mapping[turn["agent"]].get(knowledge_sentence, "")
+    current_segment_data = (tokenizer.encode(response), [turn[dialog_act][da_index]], tokenizer.encode(original_knowledge_sentence))
+    return current_segment_data
+
+
 def prepare_turn_data(agent_mapping, available_knowledge, conv_id, dialog_act, knowledge_policy,
                       response, tokenizer, turn, vec, bert_model=None, infersent=None, sentiment=None):
     knowledge_sentence = ""
@@ -451,7 +489,10 @@ def augmented_tc_dataset(tokenizer, dataset_path, dataset_cache, knowledge_index
 
         dataset = {}
         for split in splits:
-            dataset[split] = process_split(dataset_path, split, tokenizer, (vec, dialog_act), knowledge_policy,
+            if knowledge_policy == "bert_sentence":
+                process_split_sentence_knowledge(dataset_path, split, tokenizer, (vec, dialog_act), knowledge_policy)
+            else:
+                dataset[split] = process_split(dataset_path, split, tokenizer, (vec, dialog_act), knowledge_policy,
                                            sentiment=sentiment_flag)
             logger.info("Processed split %s", split)
         torch.save(dataset, dataset_cache)
