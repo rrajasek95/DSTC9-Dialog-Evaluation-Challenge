@@ -304,7 +304,8 @@ def run_train(model, optimizer, scheduler, train_loader, writer, step_counter, a
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_norm)
         if i % args.gradient_accumulation_steps == 0:
-            optimizer.step()
+            # optimizer.step()
+            xm.optimizer_step(optimizer, barrier=True)
             optimizer.zero_grad()
 
         scheduler.step()
