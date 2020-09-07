@@ -321,12 +321,14 @@ def process_split_sentence_knowledge(dataset_path, split, tokenizer, index, know
 def prepare_sentence_knowledge_data(agent_mapping, available_knowledge, conv_id, dialog_act, knowledge_policy,
                       response, tokenizer, turn, vec, bert_model=None):
     knowledge_sentences = []
+    segment_sentences = []
     for segment in turn["segments"]:
         sentence = segment["text"]
+        segment_sentences.append(tokenizer.encode(sentence))
         knowledge_sentence = bert_knowledge_selection(conv_id, sentence, vec, bert_model)
         original_knowledge_sentence = agent_mapping[turn["agent"]].get(knowledge_sentence, "")
         knowledge_sentences.append(tokenizer.encode(original_knowledge_sentence))
-    current_segment_data = (tokenizer.encode(response), [turn[dialog_act]], knowledge_sentences)
+    current_segment_data = (segment_sentences, [turn[dialog_act]], knowledge_sentences)
     return current_segment_data
 
 
