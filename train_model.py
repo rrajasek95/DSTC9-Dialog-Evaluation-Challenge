@@ -415,7 +415,7 @@ def train():
     parser.add_argument('--training_configuration', type=str, default="baseline",
                         help="Training configuration to run",
                         choices=["baseline", "kd-pd-nrg", "kd-pd-nrg-swbd", "sentiment"])
-    parser.add_argument('--dataset_configuration', type=str, default="dstc9",
+    parser.add_argument('--dataset_configuration', type=str, default="topical-chats",
                         help="Configuration of dataset to load for training",
                         choices=["dstc9", "topical-chats"])
     parser.add_argument('--generation_configuration', type=str, default="sentence",
@@ -472,7 +472,7 @@ def train():
                         help="Nucleus filtering (top-p) before sampling (<=0.0: no filtering)")
     parser.add_argument("--no_sample", action='store_true', help="Set to use greedy decoding instead of sampling")
     parser.add_argument("--max_length", type=int, default=20, help="Maximum length of the output utterances")
-    parser.add_argument("--knowledge_policy", type=str, default="bert", choices=["tf_idf", "embeddings", "infersent", "bert", "bert_sentence"])
+    parser.add_argument("--knowledge_policy", type=str, default="bert_sentence", choices=["tf_idf", "embeddings", "infersent", "bert", "bert_sentence"])
     args = parser.parse_args()
 
     # logging is set to INFO (resp. WARN) for main (resp. auxiliary) process. logger.info => log main process only, logger.warning => log all processes
