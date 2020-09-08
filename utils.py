@@ -13,6 +13,7 @@ from encoder.fb_models import InferSent
 from knowledge_index import clean
 from sentence_transformers import SentenceTransformer
 from spacy.lang.en import English
+from pd_nrg.ranker import BertRankerRetriever
 
 CONFIG_NAME = 'config.json'
 
@@ -242,7 +243,10 @@ def extract_fact_set_mapped(factsets):
     return original_sentences
 
 
-def process_split(dataset_path, split, tokenizer, index, knowledge_policy, sentiment=False):
+
+def process_split_turn(dataset_path, split, tokenizer, index, knowledge_policy, sentiment=False):
+
+
     infersent = None
     bert_model = None
     if knowledge_policy == "infersent":
@@ -289,8 +293,7 @@ def process_split(dataset_path, split, tokenizer, index, knowledge_policy, senti
     return data
 
 
-def process_split_sentence_knowledge(dataset_path, split, tokenizer, index, knowledge_policy):
-
+def process_split_sentence(dataset_path, split, tokenizer, index, knowledge_policy):
     bert_model = SentenceTransformer('bert-base-nli-stsb-mean-tokens')
     vec, dialog_act = index
     path_prefix = os.path.join(dataset_path, split)
@@ -331,9 +334,15 @@ def prepare_sentence_knowledge_data(agent_mapping, available_knowledge, conv_id,
     current_segment_data = (segment_sentences, [turn[dialog_act]], knowledge_sentences)
     return current_segment_data
 
-
+#TODO : Refactor Knowledge Selection into pd_nrg ranker classes
 def prepare_turn_data(agent_mapping, available_knowledge, conv_id, dialog_act, knowledge_policy,
                       response, tokenizer, turn, vec, bert_model=None, infersent=None, sentiment=None):
+
+    # TODO : refactor
+    # arguments - knowledge_policy
+    # method to wrap if else to get ranker class
+    # ranker.get_top_fact(segment, conv_id, threshold=True)
+
     knowledge_sentence = ""
     for segment in turn["segments"]:
         sentence = segment["text"]
@@ -385,6 +394,13 @@ def prepare_turn_data(agent_mapping, available_knowledge, conv_id, dialog_act, k
     return current_turn_data
 
 
+def get_ranker_retriever(knowledge_policy):
+    if knowledge_policy == "bert":
+        return BertRankerRetriever()
+
+
+
+
 def prepare_reading_set_for_conversation(conv_id, reading_set):
     conv_reading_set = reading_set[conv_id]
     fact_mapping_1 = extract_fact_set_mapped(conv_reading_set["agent_1"])
@@ -430,6 +446,7 @@ def load_infersent_model():
     infersent.build_vocab_k_words(K=100000)
     return infersent
 
+# TODO: refactor into ranker class - Zach
 
 def emb_knowledge_selection(conv_id, sentence, vec):
     knowledge = vec["knowledge_vecs"][conv_id]
@@ -441,7 +458,7 @@ def emb_knowledge_selection(conv_id, sentence, vec):
         knowledge_sentence = ""
     return knowledge_sentence
 
-
+# TODO: refactor into ranker class - Zach
 def infersent_knowledge_selection(conv_id, sentence, vec, infersent):
     knowledge = vec[conv_id]
     fact, sim = get_max_cosine_similarity_infersent(clean(sentence), knowledge, infersent)
@@ -451,7 +468,7 @@ def infersent_knowledge_selection(conv_id, sentence, vec, infersent):
         knowledge_sentence = ""
     return knowledge_sentence
 
-
+# TODO: refactor into ranker class - Zach
 def bert_knowledge_selection(conv_id, sentence, vec, bert):
     knowledge = vec["knowledge_vecs"][conv_id]
     fact, sim = get_max_cosine_similarity_infersent(clean(sentence), knowledge, bert, knowledge_policy="bert")
@@ -495,10 +512,10 @@ def augmented_tc_dataset(tokenizer, dataset_path, dataset_cache, knowledge_index
         dataset = {}
         for split in splits:
             if knowledge_policy == "bert_sentence":
-                dataset[split] = process_split_sentence_knowledge(dataset_path, split, tokenizer, (vec, dialog_act), knowledge_policy)
+                dataset[split] = process_split_sentence(dataset_path, split, tokenizer, (vec, dialog_act), knowledge_policy)
             else:
-                dataset[split] = process_split(dataset_path, split, tokenizer, (vec, dialog_act), knowledge_policy,
-                                           sentiment=sentiment_flag)
+                dataset[split] = process_split_turn(dataset_path, split, tokenizer, (vec, dialog_act), knowledge_policy,
+                                                    sentiment=sentiment_flag)
             logger.info("Processed split %s", split)
         torch.save(dataset, dataset_cache)
 

@@ -1,12 +1,16 @@
 import string
-from argparse import Namespace
 
 import numpy as np
 
 from elastic.topical_chats import TopicalChatsIndexRetriever
 from glove.glove_utils import get_max_cosine_similarity
-from elasticsearch import Elasticsearch
-from elasticsearch_dsl import Search
+
+
+from sentence_transformers import SentenceTransformer
+
+
+
+# TODO :
 
 class TfIdfRankerRetriever(object):
     """
@@ -36,6 +40,8 @@ class TfIdfRankerRetriever(object):
         retrieve_rank_list = [(self.knowledge_sentences[i], similarity[i]) for i in top_n_indices]
         return retrieve_rank_list
 
+    # TODO : get_top_fact(query, convo_tag, threshold=False)
+
 
 class EmbRankerRetriever(object):
 
@@ -53,6 +59,8 @@ class EmbRankerRetriever(object):
         fact = get_max_cosine_similarity(query, knowledge, self.emb_matrix, self.tokenizer)
         return fact
 
+    # TODO : get_top_fact(query, convo_tag, threshold=False)
+
 class ElasticRankerRetriever(object):
     """
     Used to implement a more general knowledge retriever
@@ -63,3 +71,23 @@ class ElasticRankerRetriever(object):
 
     def get_top_n(self, query, n=5):
         return self.tc_retriever.retrieve_facts_with_score(query)
+
+    # TODO : get_top_fact(query, convo_tag, threshold=False)
+
+
+class BertRankerRetriever(object):
+    def __init__(self, knowledge_index):
+        self.tokenizer = knowledge_index["tokenizer"]
+        self.emb_matrix = knowledge_index["emb_matrix"]
+        self.knowledge_vecs = knowledge_index["knowledge_vecs"]
+        self.model = SentenceTransformer('bert-base-nli-stsb-mean-tokens')
+
+    # TODO: Will need to implement way to select best knowledge without access to convo_tag
+    def get_top_n(self, query, convo_tag, n=1):
+        knowledge = self.knowledge_vecs[convo_tag]
+        fact = get_max_cosine_similarity(query, knowledge, self.emb_matrix, self.tokenizer)
+        return fact
+
+    # TODO : get_top_fact(query, convo_tag, threshold=False)
+    def get_top_fact(query, convo_tag, threshold=False):
+        pass
