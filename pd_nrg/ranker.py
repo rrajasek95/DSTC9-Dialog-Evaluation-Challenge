@@ -3,14 +3,18 @@ import string
 import numpy as np
 
 from elastic.topical_chats import TopicalChatsIndexRetriever
-from glove.glove_utils import get_max_cosine_similarity
+from glove.glove_utils import get_max_cosine_similarity, get_max_cosine_similarity_embs_models
+from encoder.fb_models import InferSent
+import torch
+import os
+import pickle
 
 
 from sentence_transformers import SentenceTransformer
 
 
-
-# TODO :
+def clean(s):
+    return ''.join([c if c not in string.punctuation else ' ' for c in s.lower()])
 
 class TfIdfRankerRetriever(object):
     """
@@ -52,6 +56,7 @@ class EmbRankerRetriever(object):
         self.tokenizer = knowledge_index["tokenizer"]
         self.emb_matrix = knowledge_index["emb_matrix"]
         self.knowledge_vecs = knowledge_index["knowledge_vecs"]
+        self.threshold = 0.7
 
     # TODO: Will need to implement way to select best knowledge without access to convo_tag
     def get_top_n(self, query, convo_tag, n=1):
@@ -59,7 +64,16 @@ class EmbRankerRetriever(object):
         fact = get_max_cosine_similarity(query, knowledge, self.emb_matrix, self.tokenizer)
         return fact
 
-    # TODO : get_top_fact(query, convo_tag, threshold=False)
+    def get_top_fact(self, query, convo_id, threshold=False):
+        knowledge = self.knowledge_vecs[convo_id]
+        fact, sim = get_max_cosine_similarity(query, knowledge, self.emb_matrix, self.tokenizer)
+
+        if threshold:
+            knowledge_sentence = fact if sim > self.threshold else ""
+        else:
+            knowledge_sentence = fact
+        return knowledge_sentence
+
 
 class ElasticRankerRetriever(object):
     """
@@ -77,17 +91,48 @@ class ElasticRankerRetriever(object):
 
 class BertRankerRetriever(object):
     def __init__(self, knowledge_index):
-        self.tokenizer = knowledge_index["tokenizer"]
-        self.emb_matrix = knowledge_index["emb_matrix"]
         self.knowledge_vecs = knowledge_index["knowledge_vecs"]
         self.model = SentenceTransformer('bert-base-nli-stsb-mean-tokens')
+        self.threshold = 0.35
 
-    # TODO: Will need to implement way to select best knowledge without access to convo_tag
-    def get_top_n(self, query, convo_tag, n=1):
-        knowledge = self.knowledge_vecs[convo_tag]
-        fact = get_max_cosine_similarity(query, knowledge, self.emb_matrix, self.tokenizer)
-        return fact
+    def get_top_fact(self, query, convo_id, threshold=False):
+        knowledge = self.knowledge_vecs[convo_id]
+        fact, sim = get_max_cosine_similarity_embs_models(clean(query), knowledge, self.model, knowledge_policy="bert")
 
-    # TODO : get_top_fact(query, convo_tag, threshold=False)
-    def get_top_fact(query, convo_tag, threshold=False):
-        pass
+        if threshold:
+            knowledge_sentence = fact if sim > self.threshold else ""
+        else:
+            knowledge_sentence = fact
+
+        return knowledge_sentence
+
+
+class InfersentRankerRetriever(object):
+    def __init__(self, knowledge_vecs):
+        self.knowledge_vecs = knowledge_vecs
+        self.model = self.load_infersent_model()
+        self.threshold = 0.6
+
+    def get_top_fact(self, query, convo_id, threshold=False):
+        knowledge = self.knowledge_vecs[convo_id]
+        fact, sim = get_max_cosine_similarity_embs_models(clean(query), knowledge, self.model)
+
+        if threshold:
+            knowledge_sentence = fact if sim > self.threshold else ""
+        else:
+            knowledge_sentence = fact
+
+        return knowledge_sentence
+
+
+    def load_infersent_model(self):
+        V = 2
+        MODEL_PATH = 'encoder/infersent%s.pkl' % V
+        params_model = {'bsize': 64, 'word_emb_dim': 300, 'enc_lstm_dim': 2048,
+                        'pool_type': 'max', 'dpout_model': 0.0, 'version': V}
+        infersent = InferSent(params_model)
+        infersent.load_state_dict(torch.load(MODEL_PATH))
+        W2V_PATH = 'fastText/crawl-300d-2M.vec'
+        infersent.set_w2v_path(W2V_PATH)
+        infersent.build_vocab_k_words(K=100000)
+        return infersent

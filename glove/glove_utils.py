@@ -88,7 +88,7 @@ def get_max_cosine_similarity(message, knowledge_list, embedding_matrix, tokeniz
     return max_sim_fact, max_sim
 
 
-def get_max_cosine_similarity_infersent(message, knowledge_list, model, knowledge_policy="infersent"):
+def get_max_cosine_similarity_embs_models(message, knowledge_list, model, knowledge_policy="infersent"):
     if knowledge_policy == "infersent":
         embeddings = model.encode([message], tokenize=True)
     else:
