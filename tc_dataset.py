@@ -13,12 +13,6 @@ from pd_nrg.ranker import EmbRankerRetriever
 
 
 class TopicalChatsDataset(Dataset):
-    """
-    It's absolutely necessary to create a dataset class since
-    the amount of data is huge.
-    I wonder if there are other optimization opportunities
-    - Rishi
-    """
 
     def __init__(self, dataset, tokenizer, special_tokens, args):
         self.dataset = dataset
@@ -31,6 +25,9 @@ class TopicalChatsDataset(Dataset):
         self.max_fact_length = args.max_fact_length
 
     def __getitem__(self, index):
+        """
+        TODO: document this (Rishi)
+        """
         # For the baseline implementation, we don't need to consider the DA
         (history, (response, _, fact)) = self.dataset[index]
 
@@ -62,6 +59,10 @@ class TopicalChatsDataset(Dataset):
         return candidates
 
     def build_input_from_segments(self, history, response, fact, tokenizer, lm_labels=False):
+        """
+        TODO: document this (Rishi)
+        """
+
         bos, eos, speaker1, speaker2 = tokenizer.convert_tokens_to_ids((self.special_tokens[:4]))
 
         """
@@ -70,10 +71,6 @@ class TopicalChatsDataset(Dataset):
         Considerations for design:
         1. Topical chat examples are created by adding a response every turn
         2. Last turn is always speaker2
-        To my knowledge, the position of the fact in input is mostly immaterial due to
-        the self-attention mechanism (since all tokens are equidistant). The positional
-        embeddings affect only the contextual representation (I think!)
-          - Rishi
         """
         sequence = [[bos] + fact] + history + [response + [eos]]
 
@@ -106,13 +103,6 @@ class TopicalChatsDataset(Dataset):
         return history, trunc_facts
 
 class TopicalChatsDatasetSent(Dataset):
-    """
-    It's absolutely necessary to create a dataset class since
-    the amount of data is huge.
-    I wonder if there are other optimization opportunities
-    - Rishi
-    """
-
     def __init__(self, dataset, tokenizer, special_tokens, args):
         self.dataset = dataset
         self.tokenizer = tokenizer
@@ -124,12 +114,39 @@ class TopicalChatsDatasetSent(Dataset):
         self.max_fact_length = args.max_fact_length
 
     def __getitem__(self, index):
-        # For the baseline implementation, we don't need to consider the DA
+        """
+        Baseline sentence data format.
+
+        Each example comprises of the following:
+        1. history_tuple:
+            1. conversation_history_segments - List[List[List[int]]]
+                1. Highest list level corresponds to turns in the conversation
+                2. Middle list level corresponds segments of the turn
+                3. Lowest list level are the individual tokens in the segment
+                Example:
+            2. conversation_history_da - (TODO: fill type)
+                1. dialog acts of conversation history - not relevant to baseline config
+            3. knowledge history - (TODO: fill type)
+                1. knowledge sentences corresponding to conv history - not relevant to baseline config
+
+        2. target_tuple:
+            1. response: List[int] - tokens of the expected response which is a single sentence
+            2. DA_info - not relevant to baseline config
+            3. fact: List[int] - tokens of knowledge sentence corresponding to the sentence we are generating
+
+        :return: instance: Dict[str, object]
+                    - "input_ids": the sequence of tokens of our prepared input
+                    - "token_type_ids":
+                        - tokens indicating which parts of input are 'sentence_plan', 'speaker1 response', 'speaker2 response'
+                    - "mc_token_ids":
+                        - tokens indicating whether the response is a true follow-on to the context (multiple choice selection)
+                    - "lm_labels":
+                        - tokens which indicate which parts of the sequence represent the predicted output (for language modeling)
+        """
         (history, (response, _, fact)) = self.dataset[index]
 
-        # h[0] contains the response
-        history = [h[0] for h in history]
-        history, fact = self.truncate_sequences(history, fact)
+        conversation_history_segments = [h[0] for h in history]
+        conversation_history_segments, fact = self.truncate_sequences(conversation_history_segments, fact)
 
         candidates = self.sample_candidates(self.dataset, index)
         candidates.append(response)
@@ -137,7 +154,7 @@ class TopicalChatsDatasetSent(Dataset):
         instances = []
         for j, candidate in enumerate(candidates):
             lm_labels = bool(j == self.num_candidates - 1)
-            instance = self.build_input_from_segments(history, candidate, fact, self.tokenizer, lm_labels)
+            instance = self.build_input_from_segments(conversation_history_segments, candidate, fact, self.tokenizer, lm_labels)
             instances.append(instance)
         return instances
 
@@ -158,15 +175,7 @@ class TopicalChatsDatasetSent(Dataset):
         bos, eos, speaker1, speaker2, end = tokenizer.convert_tokens_to_ids((self.special_tokens[:-2]))
         eot = tokenizer.convert_tokens_to_ids((self.special_tokens[-1]))
         """
-        Input construction (may change):
-        <bos> FACT <speaker1/2> UTT1 <speaker1/2> ... <speaker2> RESPONSE
-        Considerations for design:
-        1. Topical chat examples are created by adding a response every turn
-        2. Last turn is always speaker2
-        To my knowledge, the position of the fact in input is mostly immaterial due to
-        the self-attention mechanism (since all tokens are equidistant). The positional
-        embeddings affect only the contextual representation (I think!)
-          - Rishi
+        TODO: describe input format (Rishi)
         """
         is_new_turn = len(history) == 0 or history[-1][0] == eot
         if is_new_turn:
@@ -295,6 +304,9 @@ class TopicalChatsKDDataset(TopicalChatsDataset):
         return das, self.tokenizer.encode(knowledge)
 
     def __getitem__(self, index):
+        """
+        TODO: describe data format (Zach)
+        """
         (history, (response, mezza_das, knowledge)) = self.dataset[index]
 
         dialog_state = self._construct_dialog_state(history)
@@ -398,6 +410,9 @@ class TopicalChatsKDSentDataset(TopicalChatsDatasetSent):
         return das, self.tokenizer.encode(knowledge)
 
     def __getitem__(self, index):
+        """
+        TODO: describe data format (Rishi)
+        """
         (history, (response, mezza_das, knowledge)) = self.dataset[index]
 
         dialog_state = self._construct_dialog_state(history)
@@ -440,6 +455,9 @@ class TopicalChatsSentGenerationDataset(TopicalChatsDataset):
         self.nlp = spacy.load('en')
 
     def __getitem__(self, index):
+        """
+        TODO: document this (Zach)
+        """
         (history, (response, _, fact)) = self.dataset[index]
         num_sents = len(response)
         history = [h[0] for h in history]
@@ -447,6 +465,9 @@ class TopicalChatsSentGenerationDataset(TopicalChatsDataset):
         return [{"history": history, "plan": [self.tokenizer.decode(fact)] * num_sents}]
 
     def prepare_generation_plan_for_sentence(self, history, fact, tokenizer):
+        """
+        TODO: document this (Zach)
+        """
         bos, eos, speaker1, speaker2, end = tokenizer.convert_tokens_to_ids((self.special_tokens[:-2]))
         segmented_history = []
         for i, history_turn in enumerate(history):
@@ -477,6 +498,9 @@ class TopicalChatsKDSentGenerationDataset(TopicalChatsKDDataset):
         self.nlp = spacy.load('en')
 
     def __getitem__(self, index):
+        """
+        TODO: document this (Rishi)
+        """
         (history, (response, das, fact)) = self.dataset[index]
         history = [h[0] for h in history]
         history, fact = self.truncate_sequences(history, self.tokenizer.encode(fact))
@@ -486,6 +510,9 @@ class TopicalChatsKDSentGenerationDataset(TopicalChatsKDDataset):
         return [{"history": history, "plan": plan}]
 
     def prepare_generation_plan_for_sentence(self, history, fact, tokenizer):
+        """
+        TODO: document this (Rishi)
+        """
         bos, eos, speaker1, speaker2, end = tokenizer.convert_tokens_to_ids((self.special_tokens[:-2]))
         segmented_history = []
         for i, history_turn in enumerate(history):
@@ -564,6 +591,9 @@ class TopicalChatsSWBDDataset(TopicalChatsDataset):
         return das
 
     def __getitem__(self, index):
+        """
+        TODO: document this (Zach)
+        """
         (history, (response, mezza_das, knowledge)) = self.dataset[index]
 
         dialog_state = self._construct_dialog_state(history)
@@ -627,6 +657,9 @@ class TopicalChatsSentimentDataset(TopicalChatsDataset):
         return dialog_state
 
     def __getitem__(self, index):
+        """
+        TODO: document this (Zach)
+        """
         (history, (response, sentiment, knowledge)) = self.dataset[index]
 
         dialog_state = self._construct_dialog_state(history)
