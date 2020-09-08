@@ -116,6 +116,13 @@ TRAINING_CONFIG_TOKENS = {
 
 }
 
+TRAINING_CONFIG_LABEL_SCHEME = {
+    "baseline": "",
+    "sentiment": "sentiment",
+    "kd-pd-nrg": "mezza_da",
+    "kd-pd-nrg-swbd": "switchboard_da"
+}
+
 ATTR_TO_SPECIAL_TOKEN = {
     'bos_token': '<bos>',
     'eos_token': '<eos>',
@@ -226,36 +233,18 @@ def get_data_loaders_optimized(args, tokenizer):
         topical_chat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache, args.training_configuration,
                                    args.generation_configuration)
     else:
-        if args.training_configuration == "sentiment":
-            dact_scheme = "sentiment"
-        else:
-            dact_scheme = "mezza_da" if args.training_configuration == "kd-pd-nrg" else "switchboard_da"
+        label_scheme = TRAINING_CONFIG_LABEL_SCHEME.get(args.training_configuration)
         topical_chat = augmented_tc_dataset(tokenizer, args.dataset_path, args.dataset_cache,
-                                            args.knowledge_index_path, dact_scheme, args.knowledge_policy)
-    if args.generation_configuration != "sentence":
-        if args.training_configuration == "baseline":
-            train_dataset, valid_dataset = TopicalChatsDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), \
-                                           TopicalChatsDataset(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS, args)
-        elif args.training_configuration == "sentiment":
-            train_dataset, valid_dataset = TopicalChatsSentimentDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), \
-                                           TopicalChatsSentimentDataset(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS,
-                                                                 args)
-        else:
-            train_dataset, valid_dataset = TopicalChatsKDDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), \
-                                           TopicalChatsKDDataset(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS, args)
+                                            args.knowledge_index_path, label_scheme, args.knowledge_policy)
+    if args.generation_configuration == "sentence":
+        train_dataset, valid_dataset = get_sentence_level_datasets(args, tokenizer, topical_chat)
     else:
-        if args.training_configuration == "baseline":
-            train_dataset, valid_dataset = TopicalChatsDatasetSent(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), \
-                                           TopicalChatsDatasetSent(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS, args)
-        else:
-            train_dataset, valid_dataset = TopicalChatsKDSentDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS,
-                                                                 args), \
-                                           TopicalChatsKDSentDataset(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS,
-                                                                 args)
+        train_dataset, valid_dataset = get_turn_level_datasets(args, tokenizer, topical_chat)
 
     train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset) if args.distributed else None
     valid_sampler = torch.utils.data.distributed.DistributedSampler(valid_dataset) if args.distributed else None
 
+    # TODO: re-verify behavior of collate_batch_elements
     train_loader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size,
                               collate_fn=lambda x: collate_batch_elements(x, tokenizer, args),
                               shuffle=(not args.distributed))
@@ -267,6 +256,36 @@ def get_data_loaders_optimized(args, tokenizer):
     # logger.info("Valid dataset (Batch, Candidates, Seq length): {}".format(valid_dataset[0][0].shape))
 
     return train_loader, valid_loader, train_sampler, valid_sampler
+
+
+def get_sentence_level_datasets(args, tokenizer, topical_chat):
+    if args.training_configuration == "baseline":
+        train_dataset, valid_dataset = TopicalChatsDatasetSent(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), \
+                                       TopicalChatsDatasetSent(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS,
+                                                               args)
+    else:
+        train_dataset, valid_dataset = TopicalChatsKDSentDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS,
+                                                                 args), \
+                                       TopicalChatsKDSentDataset(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS,
+                                                                 args)
+    return train_dataset, valid_dataset
+
+
+def get_turn_level_datasets(args, tokenizer, topical_chat):
+    if args.training_configuration == "baseline":
+        train_dataset, valid_dataset = TopicalChatsDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), \
+                                       TopicalChatsDataset(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS, args)
+    elif args.training_configuration == "sentiment":
+        train_dataset, valid_dataset = TopicalChatsSentimentDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS,
+                                                                    args), \
+                                       TopicalChatsSentimentDataset(topical_chat["valid_freq"], tokenizer,
+                                                                    SPECIAL_TOKENS,
+                                                                    args)
+    else:
+        train_dataset, valid_dataset = TopicalChatsKDDataset(topical_chat["train"], tokenizer, SPECIAL_TOKENS, args), \
+                                       TopicalChatsKDDataset(topical_chat["valid_freq"], tokenizer, SPECIAL_TOKENS,
+                                                             args)
+    return train_dataset, valid_dataset
 
 
 def save_model(model, checkpoint_name, args):
