@@ -115,13 +115,19 @@ def prepare_sentence_wise_data(fct, path_prefix, segmented_sent, segmented_tgt, 
     new_resp_da = []
     # for i in range(len(src)):
     for i, (src_sentences, tgt_segments, fact, tgt_das) in enumerate(zip(segmented_sent, segmented_tgt, fct, resp_da)):
+        # src_sentences - previous turns,
+        # tgt_segments - segments of the current turn [[int]]
+
         for j, (tgt_segment, tgt_da) in enumerate(zip(tgt_segments, tgt_das)):
-            # target [j] is not the beginning of the turn
+            # for jth sentence of the target speaker
             if j != 0:
+                # append previous turns + the first (j - 1) segments of the current speaker
+
                 new_src.append(src_sentences + [tgt_segments[:j]])
             # the target is the beginning of the turn
             # the appended history will have a <eot> token to distinguish the turn boundary
             else:
+                #
                 new_src.append(src_sentences + ["<eot>"])
             new_tgt.append(tgt_segment)
             new_fct.append(fact)
@@ -266,6 +272,19 @@ def process_split(dataset_path, split, tokenizer, index, knowledge_policy, senti
                                                       tokenizer, turn, vec, bert_model, infersent, sentiment)
                 data.append((context, current_turn_data))
                 context = context + [current_turn_data]
+                # context: (history_turn_info, history_da, history_facts)
+                # [[int]] - [[[int]]] (list of turns where each turn array contains a list of segments,
+                # each segment contains a list of tokens)
+                # [context, (sentence, DA, fact)]
+
+                """
+                Input format for sentence generation:
+                <bos> (<sot>/<mot>/<eot>) (<DA>) [knowledge] <speaker1> S1 <end> S2 <eot> <speaker2> S3 <end> S4 <end> S5 <eot> <speaker1> R
+                history: [[[S1], [S2]], [[S3], [S4], [S5]]] - List[List[List[int]]]
+                DA: [int] : ["statement-opinion"]
+                Response: [int]: [5, 2, 3, 4, 1] - List[int]
+                Fact: [int]: [6, 2, 3, 4] - List[int]
+                """
 
     return data
 
