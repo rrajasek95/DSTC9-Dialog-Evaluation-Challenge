@@ -285,9 +285,9 @@ def process_split_sentence(dataset_path, split, tokenizer, index, ranker):
     reading_set_path = os.path.join(dataset_path, 'reading_sets', f'{split}.json')
     data = []
 
-    history_da = itertools.repeat(itertools.repeat(None))
-    history_knowledge = itertools.repeat(itertools.repeat(None))
-    resp_da = itertools.repeat(itertools.repeat(None))
+    # history_da = itertools.repeat(itertools.repeat(None))
+    # history_knowledge = itertools.repeat(itertools.repeat(None))
+    # resp_da = itertools.repeat(itertools.repeat(None))
 
     eot_tag = tokenizer.encode("<eot>")
     with open(path_prefix + '_full_anno.json', 'r') as annotated_split_file, \
@@ -306,9 +306,8 @@ def process_split_sentence(dataset_path, split, tokenizer, index, ranker):
                     current_segment_data = prepare_sentence_knowledge_data(agent_mapping, conv_id, dialog_act, tokenizer,
                                                                            turn, sentence, ranker, da_index)
 
-
                     convo_history_segments_copy = deepcopy(convo_history_segments)
-                    context = (convo_history_segments_copy, history_da, history_knowledge)
+                    context = (convo_history_segments_copy, None, None)
 
                     data.append((context, current_segment_data))
                     turn_history.append(current_segment_data[0])
@@ -325,7 +324,7 @@ def process_split_sentence(dataset_path, split, tokenizer, index, ranker):
 def prepare_sentence_knowledge_data(agent_mapping, conv_id, dialog_act, tokenizer, turn, sentence, ranker, da_index):
     knowledge_sentence = ranker.get_top_fact(clean(sentence), conv_id, threshold=True)
     original_knowledge_sentence = agent_mapping[turn["agent"]].get(knowledge_sentence, "")
-    return tokenizer.encode(sentence), turn[dialog_act][da_index], tokenizer.encode(original_knowledge_sentence)
+    return tokenizer.encode(sentence), None, tokenizer.encode(original_knowledge_sentence)
 
 
 
