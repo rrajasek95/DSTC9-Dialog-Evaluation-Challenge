@@ -306,17 +306,16 @@ def process_split_sentence(dataset_path, split, tokenizer, index, ranker):
                     current_segment_data = prepare_sentence_knowledge_data(agent_mapping, conv_id, dialog_act, tokenizer,
                                                                            turn, sentence, ranker, da_index)
 
+                    if len(convo_history_segments) == turn_counter:
+                        convo_history_segments.append(turn_history)
+                    else:
+                        convo_history_segments[turn_counter] = turn_history
                     convo_history_segments_copy = deepcopy(convo_history_segments)
                     context = (convo_history_segments_copy, None, None)
 
                     data.append((context, current_segment_data))
                     turn_history.append(current_segment_data[0])
-                    if len(convo_history_segments) == turn_counter:
-                        convo_history_segments.append(turn_history)
-                    else:
-                        convo_history_segments[turn_counter] = turn_history
                     da_index += 1
-                convo_history_segments[turn_counter][-1] = convo_history_segments[turn_counter][-1] + eot_tag
                 turn_counter += 1
     return data
 
