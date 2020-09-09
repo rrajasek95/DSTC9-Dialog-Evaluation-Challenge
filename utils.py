@@ -13,7 +13,7 @@ from knowledge_index import clean
 from sentence_transformers import SentenceTransformer
 from spacy.lang.en import English
 from pd_nrg.ranker import BertRankerRetriever, InfersentRankerRetriever, EmbRankerRetriever
-
+from copy import deepcopy
 CONFIG_NAME = 'config.json'
 
 logger = logging.getLogger(__file__)
@@ -279,46 +279,54 @@ DA: [int] : ["statement-opinion"]
 Response: [int]: [5, 2, 3, 4, 1] - List[int]
 Fact: [int]: [6, 2, 3, 4] - List[int]
 """
-def process_split_sentence(dataset_path, split, tokenizer, index, knowledge_policy):
-    bert_model = SentenceTransformer('bert-base-nli-stsb-mean-tokens')
+def process_split_sentence(dataset_path, split, tokenizer, index, ranker):
     vec, dialog_act = index
     path_prefix = os.path.join(dataset_path, split)
     reading_set_path = os.path.join(dataset_path, 'reading_sets', f'{split}.json')
     data = []
+
+    history_da = itertools.repeat(itertools.repeat(None))
+    history_knowledge = itertools.repeat(itertools.repeat(None))
+    resp_da = itertools.repeat(itertools.repeat(None))
+
+    eot_tag = tokenizer.encode("<eot>")
     with open(path_prefix + '_full_anno.json', 'r') as annotated_split_file, \
             open(reading_set_path, 'r') as reading_set_file:
         annotated_data = json.load(annotated_split_file)
         reading_set = json.load(reading_set_file)
         for conv_id, conv_data in tqdm(annotated_data.items()):
-            context = []
-
+            convo_history_segments = []
             agent_knowledge, agent_mapping = prepare_reading_set_for_conversation(conv_id, reading_set)
-
+            turn_counter = 0
             for turn in conv_data["content"]:
-                response = turn["message"]
+                turn_history = []
+                da_index = 0
+                for segment in turn["segments"]:
+                    sentence = segment["text"]
+                    current_segment_data = prepare_sentence_knowledge_data(agent_mapping, conv_id, dialog_act, tokenizer,
+                                                                           turn, sentence, ranker, da_index)
 
-                available_knowledge = agent_knowledge[turn["agent"]]
-                current_turn_data = prepare_sentence_knowledge_data(agent_mapping, available_knowledge, conv_id,
-                                                      dialog_act, knowledge_policy, response,
-                                                      tokenizer, turn, vec, bert_model)
-                data.append((context, current_turn_data))
-                context = context + [current_turn_data]
 
+                    convo_history_segments_copy = deepcopy(convo_history_segments)
+                    context = (convo_history_segments_copy, history_da, history_knowledge)
+
+                    data.append((context, current_segment_data))
+                    turn_history.append(current_segment_data[0])
+                    if len(convo_history_segments) == turn_counter:
+                        convo_history_segments.append(turn_history)
+                    else:
+                        convo_history_segments[turn_counter] = turn_history
+                    da_index += 1
+                convo_history_segments[turn_counter][-1] = convo_history_segments[turn_counter][-1] + eot_tag
+                turn_counter += 1
     return data
 
 
-def prepare_sentence_knowledge_data(agent_mapping, available_knowledge, conv_id, dialog_act, knowledge_policy,
-                      response, tokenizer, turn, vec, bert_model=None):
-    knowledge_sentences = []
-    segment_sentences = []
-    for segment in turn["segments"]:
-        sentence = segment["text"]
-        segment_sentences.append(tokenizer.encode(sentence))
-        knowledge_sentence = bert_knowledge_selection(conv_id, sentence, vec, bert_model)
-        original_knowledge_sentence = agent_mapping[turn["agent"]].get(knowledge_sentence, "")
-        knowledge_sentences.append(tokenizer.encode(original_knowledge_sentence))
-    current_segment_data = (segment_sentences, [turn[dialog_act]], knowledge_sentences)
-    return current_segment_data
+def prepare_sentence_knowledge_data(agent_mapping, conv_id, dialog_act, tokenizer, turn, sentence, ranker, da_index):
+    knowledge_sentence = ranker.get_top_fact(clean(sentence), conv_id, threshold=True)
+    original_knowledge_sentence = agent_mapping[turn["agent"]].get(knowledge_sentence, "")
+    return tokenizer.encode(sentence), turn[dialog_act][da_index], tokenizer.encode(original_knowledge_sentence)
+
 
 
 # TODO : Refactor Knowledge Selection for tf-idf into ranker class - Rishi
@@ -372,7 +380,7 @@ def prepare_turn_data(agent_mapping, available_knowledge, conv_id, dialog_act, k
 
 
 def get_ranker_retriever(knowledge_policy, vec):
-    if knowledge_policy == "bert":
+    if knowledge_policy == "bert" or knowledge_policy =="bert_sentence":
         return BertRankerRetriever(vec)
     elif knowledge_policy == "infersent":
         return InfersentRankerRetriever(vec)
@@ -452,7 +460,7 @@ def augmented_tc_dataset(tokenizer, dataset_path, dataset_cache, knowledge_index
         dataset = {}
         for split in splits:
             if knowledge_policy == "bert_sentence":
-                dataset[split] = process_split_sentence(dataset_path, split, tokenizer, (vec, dialog_act), knowledge_policy)
+                dataset[split] = process_split_sentence(dataset_path, split, tokenizer, (vec, dialog_act), ranker)
             else:
                 dataset[split] = process_split_turn(dataset_path, split, tokenizer, (vec, dialog_act), knowledge_policy,
                                                     sentiment=sentiment_flag, ranker=ranker)

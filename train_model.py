@@ -117,7 +117,7 @@ TRAINING_CONFIG_TOKENS = {
 }
 
 TRAINING_CONFIG_LABEL_SCHEME = {
-    "baseline": "",
+    "baseline": "switchboard_da",
     "sentiment": "sentiment",
     "kd-pd-nrg": "mezza_da",
     "kd-pd-nrg-swbd": "switchboard_da"
@@ -421,7 +421,7 @@ def train():
     parser.add_argument('--generation_configuration', type=str, default="sentence",
                         help="How the output is generated, sentence by sentence or turn level",
                         choices=["sentence", "turn_level"])
-    parser.add_argument('--knowledge_index_path', type=str, default="tc_processed",
+    parser.add_argument('--knowledge_index_path', type=str, default="tc_processed/tc_knowledge_index_bert_all.pkl",
                         help="Path to knowledge index file")
     parser.add_argument("--dataset_cache", type=str, default='./dataset_caches', help="Path or url of the dataset cache")
     parser.add_argument("--model_checkpoint", type=str, default="gpt2-medium",
