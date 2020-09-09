@@ -26,7 +26,32 @@ class TopicalChatsDataset(Dataset):
 
     def __getitem__(self, index):
         """
-        TODO: document this (Rishi)
+        Baseline sentence data format.
+
+        Each example comprises of the following:
+        1. history_tuple:
+            1. conversation_history - List[List[int]]
+                1. Highest list level corresponds to turns in the conversation
+                2. Lowest list level are the individual tokens in the segment
+                Example:
+            2. conversation_history_da - (TODO: fill type)
+                1. dialog acts of conversation history - not relevant to baseline config
+            3. knowledge history - (TODO: fill type)
+                1. knowledge sentences corresponding to conv history - not relevant to baseline config
+
+        2. target_tuple:
+            1. response: List[int] - tokens of the expected response which is a single turn
+            2. DA_info - not relevant to baseline config
+            3. fact: List[int] - tokens of knowledge sentence corresponding to the sentence we are generating
+
+        :return: instance: Dict[str, object]
+                    - "input_ids": the sequence of tokens of our prepared input
+                    - "token_type_ids":
+                        - tokens indicating which parts of input are 'sentence_plan', 'speaker1 response', 'speaker2 response'
+                    - "mc_token_ids":
+                        - tokens indicating whether the response is a true follow-on to the context (multiple choice selection)
+                    - "lm_labels":
+                        - tokens which indicate which parts of the sequence represent the predicted output (for language modeling)
         """
         # For the baseline implementation, we don't need to consider the DA
         (history, (response, _, fact)) = self.dataset[index]
@@ -60,18 +85,16 @@ class TopicalChatsDataset(Dataset):
 
     def build_input_from_segments(self, history, response, fact, tokenizer, lm_labels=False):
         """
-        TODO: document this (Rishi)
-        """
-
-        bos, eos, speaker1, speaker2 = tokenizer.convert_tokens_to_ids((self.special_tokens[:4]))
-
-        """
         Input construction (may change):
-        <bos> FACT <speaker1/2> UTT1 <speaker1/2> ... <speaker2> RESPONSE
+        <bos> FACT <speaker1/2> UTT1 <speaker1/2> ... <speaker2> RESPONSE <eos>
         Considerations for design:
         1. Topical chat examples are created by adding a response every turn
         2. Last turn is always speaker2
         """
+
+        bos, eos, speaker1, speaker2 = tokenizer.convert_tokens_to_ids((self.special_tokens[:4]))
+
+
         sequence = [[bos] + fact] + history + [response + [eos]]
 
         sequence = [sequence[0]] + [[speaker2 if (len(sequence) - i) % 2 else speaker1] + s for i, s in
@@ -175,7 +198,12 @@ class TopicalChatsDatasetSent(Dataset):
         bos, eos, speaker1, speaker2, end = tokenizer.convert_tokens_to_ids((self.special_tokens[:-2]))
         eot = tokenizer.convert_tokens_to_ids((self.special_tokens[-1]))
         """
-        TODO: describe input format (Rishi)
+        Input construction:
+        <bos> FACT <speaker1/2> S1 <end> S2 <end> ... <eot> <speaker1/2> ... <speaker2> S_n <end> RESPONSE_SEGMENT <eos>
+        Considerations for design:
+        1. All the segments of a given speaker share the same token_type_id
+        2. The LM loss and MC loss is computed over the segment we are trying to predict
+        3. Last turn is always speaker2
         """
         is_new_turn = len(history) == 0 or history[-1][0] == eot
         if is_new_turn:
@@ -411,7 +439,35 @@ class TopicalChatsKDSentDataset(TopicalChatsDatasetSent):
 
     def __getitem__(self, index):
         """
-        TODO: describe data format (Rishi)
+        Knowledge Driven Sentence data format.
+
+        Each example comprises of the following:
+        1. history_tuple:
+            1. conversation_history - List[List[List[int]]]
+                1. Highest list level corresponds to turns in the conversation
+                2. Middle list level corresponds segments of the turn
+                3. Lowest list level are the individual tokens in the segment
+                Example:
+            2. conversation_history_da - (TODO: fill type)
+                1. dialog acts of conversation history - currently unused by the KD config
+            3. knowledge history - (TODO: fill type)
+                1. knowledge sentences corresponding to conv history - currently unused by the KD config
+
+        2. target_tuple:
+            1. response: List[int] - tokens of the expected response which is a single turn
+            2. DA_info - List[int] - the dialog act that's used by the currently generated sentence
+            3. fact: List[int] - tokens of knowledge sentence corresponding to the sentence we are generating
+
+        :return: instance: Dict[str, object]
+                    - "input_ids": the sequence of tokens of our prepared input
+                    - "token_type_ids":
+                        - tokens indicating which parts of input are 'sentence_plan', 'speaker1 response', 'speaker2 response'
+                    - "mc_token_ids":
+                        - tokens indicating whether the response is a true follow-on to the context (multiple choice selection)
+                    - "lm_labels":
+                        - tokens which indicate which parts of the sequence represent the predicted output (for language modeling)
+                    - "das_to_return":
+                        - the dialog act of the sentence, used for evaluation purpose
         """
         (history, (response, mezza_das, knowledge)) = self.dataset[index]
 
@@ -499,8 +555,30 @@ class TopicalChatsKDSentGenerationDataset(TopicalChatsKDDataset):
 
     def __getitem__(self, index):
         """
-        TODO: document this (Rishi)
+        KD Sentence data format for generation
+
+        Each example comprises of the following:
+        1. history_tuple:
+            1. conversation_history - List[List[List[int]]]
+                1. Highest list level corresponds to turns in the conversation
+                2. Middle list level corresponds segments of the turn
+                3. Lowest list level are the individual tokens in the segment
+                Example:
+            2. conversation_history_da - (TODO: fill type)
+                1. dialog acts of conversation history - currently unused by the KD config
+            3. knowledge history - (TODO: fill type)
+                1. knowledge sentences corresponding to conv history - currently unused by the KD config
+
+        2. target_tuple:
+            1. response: List[int] - tokens of the expected response which is a single turn
+            2. DA_info - List[int] - the dialog act that's used by the currently generated sentence
+            3. fact: List[int] - tokens of knowledge sentence corresponding to the sentence we are generating
+
+        :return: instance: Dict[str, object]
+                - "history": The conversation_history component
+                - "plan": The sentence plan comprising of DA, fact, and uses fact token for each sentence
         """
+
         (history, (response, das, fact)) = self.dataset[index]
         history = [h[0] for h in history]
         history, fact = self.truncate_sequences(history, self.tokenizer.encode(fact))
@@ -511,7 +589,12 @@ class TopicalChatsKDSentGenerationDataset(TopicalChatsKDDataset):
 
     def prepare_generation_plan_for_sentence(self, history, fact, tokenizer):
         """
-        TODO: document this (Rishi)
+        Input construction:
+        <bos> <da> FACT _fact/_nofact <speaker1/2> S1 <end> S2 <end> ... <eot> <speaker1/2> ... <speaker2> S_n <end> RESPONSE_SEGMENT <eos>
+        Considerations for design:
+        1. All the segments of a given speaker share the same token_type_id
+        2. The LM loss and MC loss is computed over the segment we are trying to predict
+        3. Last turn is always speaker2
         """
         bos, eos, speaker1, speaker2, end = tokenizer.convert_tokens_to_ids((self.special_tokens[:-2]))
         segmented_history = []
