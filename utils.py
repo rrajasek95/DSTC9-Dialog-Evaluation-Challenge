@@ -8,12 +8,12 @@ import torch
 from nltk import word_tokenize
 from sklearn.metrics.pairwise import linear_kernel
 from tqdm import tqdm
-from glove.glove_utils import get_max_cosine_similarity, get_max_cosine_similarity_infersent
-from encoder.fb_models import InferSent
+from glove.glove_utils import get_max_cosine_similarity, get_max_cosine_similarity_embs_models
 from knowledge_index import clean
 from sentence_transformers import SentenceTransformer
 from spacy.lang.en import English
-
+from pd_nrg.ranker import BertRankerRetriever, InfersentRankerRetriever, EmbRankerRetriever
+from copy import deepcopy
 CONFIG_NAME = 'config.json'
 
 logger = logging.getLogger(__file__)
@@ -242,13 +242,7 @@ def extract_fact_set_mapped(factsets):
     return original_sentences
 
 
-def process_split(dataset_path, split, tokenizer, index, knowledge_policy, sentiment=False):
-    infersent = None
-    bert_model = None
-    if knowledge_policy == "infersent":
-        infersent = load_infersent_model()
-    elif knowledge_policy == "bert":
-        bert_model = SentenceTransformer('bert-base-nli-stsb-mean-tokens')
+def process_split_turn(dataset_path, split, tokenizer, index, knowledge_policy, sentiment=False, ranker=None):
     vec, dialog_act = index
     path_prefix = os.path.join(dataset_path, split)
     reading_set_path = os.path.join(dataset_path, 'reading_sets', f'{split}.json')
@@ -259,38 +253,84 @@ def process_split(dataset_path, split, tokenizer, index, knowledge_policy, senti
         reading_set = json.load(reading_set_file)
         for conv_id, conv_data in tqdm(annotated_data.items()):
             context = []
-
             agent_knowledge, agent_mapping = prepare_reading_set_for_conversation(conv_id, reading_set)
-
             for turn in conv_data["content"]:
-
                 response = turn["message"]
 
                 available_knowledge = agent_knowledge[turn["agent"]]
                 current_turn_data = prepare_turn_data(agent_mapping, available_knowledge, conv_id,
                                                       dialog_act, knowledge_policy, response,
-                                                      tokenizer, turn, vec, bert_model, infersent, sentiment)
+                                                      tokenizer, turn, vec, sentiment, ranker=ranker)
                 data.append((context, current_turn_data))
                 context = context + [current_turn_data]
-                # context: (history_turn_info, history_da, history_facts)
-                # [[int]] - [[[int]]] (list of turns where each turn array contains a list of segments,
-                # each segment contains a list of tokens)
-                # [context, (sentence, DA, fact)]
-
-                """
-                Input format for sentence generation:
-                <bos> (<sot>/<mot>/<eot>) (<DA>) [knowledge] <speaker1> S1 <end> S2 <eot> <speaker2> S3 <end> S4 <end> S5 <eot> <speaker1> R
-                history: [[[S1], [S2]], [[S3], [S4], [S5]]] - List[List[List[int]]]
-                DA: [int] : ["statement-opinion"]
-                Response: [int]: [5, 2, 3, 4, 1] - List[int]
-                Fact: [int]: [6, 2, 3, 4] - List[int]
-                """
-
     return data
 
 
+# context: (history_turn_info, history_da, history_facts)
+# [[int]] - [[[int]]] (list of turns where each turn array contains a list of segments,
+# each segment contains a list of tokens)
+# [context, (sentence, DA, fact)]
+
+"""
+Input format for sentence generation:
+<bos> (<sot>/<mot>/<eot>) (<DA>) [knowledge] <speaker1> S1 <end> S2 <eot> <speaker2> S3 <end> S4 <end> S5 <eot> <speaker1> R
+history: [[[S1], [S2]], [[S3], [S4], [S5]]] - List[List[List[int]]]
+DA: [int] : ["statement-opinion"]
+Response: [int]: [5, 2, 3, 4, 1] - List[int]
+Fact: [int]: [6, 2, 3, 4] - List[int]
+"""
+def process_split_sentence(dataset_path, split, tokenizer, index, ranker):
+    vec, dialog_act = index
+    path_prefix = os.path.join(dataset_path, split)
+    reading_set_path = os.path.join(dataset_path, 'reading_sets', f'{split}.json')
+    data = []
+
+    # history_da = itertools.repeat(itertools.repeat(None))
+    # history_knowledge = itertools.repeat(itertools.repeat(None))
+    # resp_da = itertools.repeat(itertools.repeat(None))
+
+    eot_tag = tokenizer.encode("<eot>")
+    with open(path_prefix + '_full_anno.json', 'r') as annotated_split_file, \
+            open(reading_set_path, 'r') as reading_set_file:
+        annotated_data = json.load(annotated_split_file)
+        reading_set = json.load(reading_set_file)
+        for conv_id, conv_data in tqdm(annotated_data.items()):
+            convo_history_segments = []
+            agent_knowledge, agent_mapping = prepare_reading_set_for_conversation(conv_id, reading_set)
+            turn_counter = 0
+            for turn in conv_data["content"]:
+                turn_history = []
+                da_index = 0
+                for segment in turn["segments"]:
+                    sentence = segment["text"]
+                    current_segment_data = prepare_sentence_knowledge_data(agent_mapping, conv_id, dialog_act, tokenizer,
+                                                                           turn, sentence, ranker, da_index)
+
+                    if len(convo_history_segments) == turn_counter:
+                        convo_history_segments.append(turn_history)
+                    else:
+                        convo_history_segments[turn_counter] = turn_history
+                    convo_history_segments_copy = deepcopy(convo_history_segments)
+                    context = (convo_history_segments_copy, None, None)
+
+                    data.append((context, current_segment_data))
+                    turn_history.append(current_segment_data[0])
+                    da_index += 1
+                turn_counter += 1
+    return data
+
+
+def prepare_sentence_knowledge_data(agent_mapping, conv_id, dialog_act, tokenizer, turn, sentence, ranker, da_index):
+    knowledge_sentence = ranker.get_top_fact(clean(sentence), conv_id, threshold=True)
+    original_knowledge_sentence = agent_mapping[turn["agent"]].get(knowledge_sentence, "")
+    return tokenizer.encode(sentence), None, tokenizer.encode(original_knowledge_sentence)
+
+
+
+# TODO : Refactor Knowledge Selection for tf-idf into ranker class - Rishi
 def prepare_turn_data(agent_mapping, available_knowledge, conv_id, dialog_act, knowledge_policy,
-                      response, tokenizer, turn, vec, bert_model=None, infersent=None, sentiment=None):
+                      response, tokenizer, turn, vec, sentiment=None, ranker=None):
+
     knowledge_sentence = ""
     for segment in turn["segments"]:
         sentence = segment["text"]
@@ -314,15 +354,10 @@ def prepare_turn_data(agent_mapping, available_knowledge, conv_id, dialog_act, k
             if similarities[closest_knowledge_index] > 0.3:
                 knowledge_sentence = available_knowledge[closest_knowledge_index]
                 break
-        elif knowledge_policy == "embeddings":
-            knowledge_sentence = emb_knowledge_selection(conv_id, sentence, vec)
-            break
-        elif knowledge_policy == "bert":
-            knowledge_sentence = bert_knowledge_selection(conv_id, sentence, vec, bert_model)
-            break
         else:
-            knowledge_sentence = infersent_knowledge_selection(conv_id, sentence, vec, infersent)
-            break
+            knowledge_sentence = ranker.get_top_fact(clean(sentence), conv_id, threshold=True)
+            if knowledge_sentence != "":
+                break
     else:
         if knowledge_policy == "tf_idf":
             text_tfidf = vec.transform([clean(response)])
@@ -341,6 +376,16 @@ def prepare_turn_data(agent_mapping, available_knowledge, conv_id, dialog_act, k
         tokenizer.encode(response), turn[dialog_act], tokenizer.encode(original_knowledge_sentence))
     return current_turn_data
 
+
+def get_ranker_retriever(knowledge_policy, vec):
+    if knowledge_policy == "bert" or knowledge_policy =="bert_sentence":
+        return BertRankerRetriever(vec)
+    elif knowledge_policy == "infersent":
+        return InfersentRankerRetriever(vec)
+    elif knowledge_policy == "embeddings":
+        return EmbRankerRetriever(vec)
+    else:
+        return None
 
 def prepare_reading_set_for_conversation(conv_id, reading_set):
     conv_reading_set = reading_set[conv_id]
@@ -375,84 +420,48 @@ def prepare_reading_set_for_conversation(conv_id, reading_set):
     return agent_knowledge, agent_mapping
 
 
-def load_infersent_model():
-    V = 2
-    MODEL_PATH = 'encoder/infersent%s.pkl' % V
-    params_model = {'bsize': 64, 'word_emb_dim': 300, 'enc_lstm_dim': 2048,
-                    'pool_type': 'max', 'dpout_model': 0.0, 'version': V}
-    infersent = InferSent(params_model)
-    infersent.load_state_dict(torch.load(MODEL_PATH))
-    W2V_PATH = 'fastText/crawl-300d-2M.vec'
-    infersent.set_w2v_path(W2V_PATH)
-    infersent.build_vocab_k_words(K=100000)
-    return infersent
-
-
-def emb_knowledge_selection(conv_id, sentence, vec):
-    knowledge = vec["knowledge_vecs"][conv_id]
-    fact, sim = get_max_cosine_similarity(clean(sentence), knowledge, vec["emb_matrix"],
-                                          vec["tokenizer"])
-    if sim > 0.7:
-        knowledge_sentence = fact
-    else:
-        knowledge_sentence = ""
-    return knowledge_sentence
-
-
-def infersent_knowledge_selection(conv_id, sentence, vec, infersent):
-    knowledge = vec[conv_id]
-    fact, sim = get_max_cosine_similarity_infersent(clean(sentence), knowledge, infersent)
-    if sim > 0.6:
-        knowledge_sentence = fact
-    else:
-        knowledge_sentence = ""
-    return knowledge_sentence
-
-
-def bert_knowledge_selection(conv_id, sentence, vec, bert):
-    knowledge = vec["knowledge_vecs"][conv_id]
-    fact, sim = get_max_cosine_similarity_infersent(clean(sentence), knowledge, bert, knowledge_policy="bert")
-    if sim > 0.35:
-        knowledge_sentence = fact
-    else:
-        knowledge_sentence = ""
-    return knowledge_sentence
-
 def load_infersent_vecs(knowledge_index_path):
-    splits = ['train', 'valid_freq', 'test_freq', 'test_rare', 'valid_rare']
-    vecs = {}
-    for split in splits:
-        data_path = os.path.join(knowledge_index_path, f'tc_knowledge_index_facebook_{split}.pkl')
-        with open(data_path, 'rb') as knowledge_index_file:
-            index_data = pickle.load(knowledge_index_file)
-            vecs.update(index_data['knowledge_vecs'])
-    return vecs
+        splits = ['train', 'valid_freq', 'test_freq', 'test_rare', 'valid_rare']
+        vecs = {}
+        for split in splits:
+            data_path = os.path.join(knowledge_index_path, f'tc_knowledge_index_facebook_{split}.pkl')
+            with open(data_path, 'rb') as knowledge_index_file:
+                index_data = pickle.load(knowledge_index_file)
+                vecs.update(index_data['knowledge_vecs'])
+        return vecs
 
-
-def augmented_tc_dataset(tokenizer, dataset_path, dataset_cache, knowledge_index_path, dialog_act, knowledge_policy):
-    sentiment_flag = dialog_act == "sentiment"
-    dataset_cache = dataset_cache + '_augmented_' + type(tokenizer).__name__
+def load_knowledge_vecs(knowledge_policy, knowledge_index_path):
     if knowledge_policy == "infersent":
         vec = load_infersent_vecs(knowledge_index_path)
     else:
         with open(knowledge_index_path, 'rb') as knowledge_index_file:
             index_data = pickle.load(knowledge_index_file)
-        if knowledge_policy == "tf_idf":
-            vec = index_data["vectorizer"]
-        else:
-            vec = index_data
+        vec = index_data["vectorizer"] if knowledge_policy == "tf_idf" else index_data
+
+    return vec
+
+def augmented_tc_dataset(tokenizer, dataset_path, dataset_cache, knowledge_index_path, dialog_act, knowledge_policy):
+    sentiment_flag = dialog_act == "sentiment"
+    dataset_cache = dataset_cache + '_augmented_' + type(tokenizer).__name__
+
     if dataset_cache and os.path.isfile(dataset_cache):
         logger.info("Load tokenized dataset from cache at %s", dataset_cache)
         dataset = torch.load(dataset_cache)
     else:
+        vec = load_knowledge_vecs(knowledge_policy, knowledge_index_path)
+        ranker = get_ranker_retriever(knowledge_policy, vec)
+
         logger.info("Loading dataset from %s", dataset_path)
 
         splits = ['train', 'valid_freq', 'test_freq', 'test_rare', 'valid_rare']
 
         dataset = {}
         for split in splits:
-            dataset[split] = process_split(dataset_path, split, tokenizer, (vec, dialog_act), knowledge_policy,
-                                           sentiment=sentiment_flag)
+            if knowledge_policy == "bert_sentence":
+                dataset[split] = process_split_sentence(dataset_path, split, tokenizer, (vec, dialog_act), ranker)
+            else:
+                dataset[split] = process_split_turn(dataset_path, split, tokenizer, (vec, dialog_act), knowledge_policy,
+                                                    sentiment=sentiment_flag, ranker=ranker)
             logger.info("Processed split %s", split)
         torch.save(dataset, dataset_cache)
 

@@ -147,6 +147,7 @@ class TopicalChatsDatasetSent(Dataset):
                 2. Middle list level corresponds segments of the turn
                 3. Lowest list level are the individual tokens in the segment
                 Example:
+
             2. conversation_history_da - (TODO: fill type)
                 1. dialog acts of conversation history - not relevant to baseline config
             3. knowledge history - (TODO: fill type)
@@ -168,7 +169,7 @@ class TopicalChatsDatasetSent(Dataset):
         """
         (history, (response, _, fact)) = self.dataset[index]
 
-        conversation_history_segments = [h[0] for h in history]
+        conversation_history_segments = history[0]
         conversation_history_segments, fact = self.truncate_sequences(conversation_history_segments, fact)
 
         candidates = self.sample_candidates(self.dataset, index)
@@ -205,17 +206,25 @@ class TopicalChatsDatasetSent(Dataset):
         2. The LM loss and MC loss is computed over the segment we are trying to predict
         3. Last turn is always speaker2
         """
-        is_new_turn = len(history) == 0 or history[-1][0] == eot
-        if is_new_turn:
-            history = history[:-1] # Skip EOT marker
+
+        # if new turn then last element of history array (turn level) will be empty
+        is_new_turn = len(history[-1]) == 0
 
         segmented_history = []
-        for i, history_turn in enumerate(history):
+        for i, history_turn in enumerate(history[:-1]):
             # interleave end of sentence markers between segments
             segments = list(chain.from_iterable(
                 [turn_segment + [end] for turn_segment in history_turn[:-1]] + [history_turn[-1]]
             ))
 
+            segments = segments + [eot]
+            segmented_history.append(segments)
+
+        # last turn segment
+        if len(history[-1]) > 0:
+            segments = list(chain.from_iterable(
+                [turn_segment + [end] for turn_segment in history[-1][:-1]] + [history[-1][-1]]
+            ))
             segmented_history.append(segments)
 
         sequence = [[bos] + fact] + segmented_history + [response + [eos]]
@@ -253,11 +262,8 @@ class TopicalChatsDatasetSent(Dataset):
 
     def truncate_sequences(self, history, fact):
         # Truncate history turns to reduce memory requirement
-        if len(history) > (2 * self.max_history + 2) and history[-1][0] == self.tokenizer.encode("<eot>"):
-            history = history[-(2 * self.max_history + 2):]
-        elif len(history) > (2 * self.max_history + 1):
+        if len(history) > (2 * self.max_history + 1):
             history = history[-(2 * self.max_history + 1):]
-
 
         # Truncate facts to decrease overall input length
         trunc_facts = fact[:min(len(fact), self.max_fact_length)]
