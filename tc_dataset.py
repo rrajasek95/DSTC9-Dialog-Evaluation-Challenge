@@ -221,10 +221,11 @@ class TopicalChatsDatasetSent(Dataset):
             segmented_history.append(segments)
 
         # last turn segment
-        segments = list(chain.from_iterable(
-            [turn_segment + [end] for turn_segment in history[-1][:-1]] + [history[-1][-1]]
-        ))
-        segmented_history.append(segments)
+        if len(history[-1]) > 0:
+            segments = list(chain.from_iterable(
+                [turn_segment + [end] for turn_segment in history[-1][:-1]] + [history[-1][-1]]
+            ))
+            segmented_history.append(segments)
 
         sequence = [[bos] + fact] + segmented_history + [response + [eos]]
         if is_new_turn:
