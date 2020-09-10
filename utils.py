@@ -26,14 +26,14 @@ def segment_src(src):
     nlp = English()
     sentencizer = nlp.create_pipe("sentencizer")
     nlp.add_pipe(sentencizer)
-    output = []
-    for each in src:
-        current_context = []
-        for turn in each:
+    segmented_conversations = []
+    for conversation in src:
+        segmented_conversation = []
+        for turn in conversation:
             doc = nlp(turn)
-            current_context.append([each.text for each in doc.sents])
-        output.append(current_context)
-    return output
+            segmented_conversation.append([segment.text for segment in doc.sents])
+        segmented_conversations.append(segmented_conversation)
+    return segmented_conversations
 
 def segment_tgt(tgt):
     nlp = English()
@@ -57,9 +57,7 @@ def load_data(dataset_path, split, training_configuration, generation_config):
     if generation_config != "sentence":
         return prepare_turn_wise_data(fct, path_prefix, src, tgt, training_configuration)
     elif generation_config == "sentence":
-        segmented_sent = segment_src(src)
-        segmented_tgt = segment_tgt(tgt)
-        return prepare_sentence_wise_data(fct, path_prefix, segmented_sent, segmented_tgt, training_configuration)
+        return prepare_sentence_wise_data(fct, path_prefix, src, tgt, training_configuration)
 
 
 def load_data_for_sentence_generation(dataset_path, split, training_configuration):
@@ -70,20 +68,15 @@ def load_data_for_sentence_generation(dataset_path, split, training_configuratio
     tgt = [l.strip().replace("_go", "").replace("_eos", "") for l in open(path_prefix + '.tgt').readlines()]
     fct = [l.strip() for l in open(path_prefix + '.fct').readlines()]
 
-    if training_configuration != "baseline":
-        history_da_file = path_prefix + (".src.da" if training_configuration == "kd-pd-nrg" else ".src.swbd3.da")
-        history_resp_file = path_prefix + (".tgt.da" if training_configuration == "kd-pd-nrg" else ".tgt.swbd3.da")
+    segmented_conversation_contexts = segment_src(src)
+    segmented_responses = segment_tgt(tgt)
 
-        history_da = [list(map(transform_da, l.strip().split("_eos")[:-1])) for l in open(history_da_file).readlines()]
-        history_da = [[each.replace("<>", "") for each in history_da[i]] for i in
-                      range(len(history_da))]
-        history_knowledge = itertools.repeat(itertools.repeat(""))
-        # history_knowledge = [l.strip().split("_eos")[:-1] for l in open(path_prefix + ".src.fct")]
-        resp_da = [transform_da(l.strip()).split(" ") for l in open(history_resp_file).readlines()]
+    if training_configuration != "baseline":
+        history_da, history_knowledge, resp_da = load_da_history_data(path_prefix, training_configuration)
     else:
-        history_da = itertools.repeat(itertools.repeat(None))
-        history_knowledge = itertools.repeat(itertools.repeat(None))
-        resp_da = itertools.repeat(None)
+        history_da, history_knowledge, resp_da = load_dummy_da_history(
+            segmented_conversation_contexts,
+            segmented_responses)
 
     segmented_sent = segment_src(src)
     segmented_tgt = segment_tgt(tgt)
@@ -92,49 +85,71 @@ def load_data_for_sentence_generation(dataset_path, split, training_configuratio
 
     return list(zip(context, zip(segmented_tgt, resp_da, fct)))
 
-def prepare_sentence_wise_data(fct, path_prefix, segmented_sent, segmented_tgt, training_configuration):
+def load_da_history_data(path_prefix, training_configuration):
+
+    history_da_file = path_prefix + (".src.da" if training_configuration == "kd-pd-nrg" else ".src.swbd3.da")
+    history_resp_file = path_prefix + (".tgt.da" if training_configuration == "kd-pd-nrg" else ".tgt.swbd3.da")
+
+    history_da = [list(map(transform_da, l.strip().split("_eos")[:-1])) for l in
+                  open(history_da_file).readlines()]
+    history_da = [[each.replace("<>", "") for each in history_da[i]] for i in
+                  range(len(history_da))]
+    history_knowledge = itertools.repeat(itertools.repeat(""))
+    # history_knowledge = [l.strip().split("_eos")[:-1] for l in open(path_prefix + ".src.fct")]
+    # We load the DAs as an iterable to make it compatible with the baseline itertools repeat logic
+    resp_da = [transform_da(l.strip()).split() for l in open(history_resp_file).readlines()]
+
+    return history_da, history_knowledge, resp_da
+
+def load_dummy_da_history(segmented_conversations, segmented_responses):
+    # We need src information to produce the right number of segments
+
+    dummy_data = []
+    for conversation in segmented_conversations:
+        conversation_dummy = []
+        for turn in conversation:
+            turn_dummy = []
+            for segment in turn:
+                turn_dummy.append(None)
+            conversation_dummy.append(turn_dummy)
+
+        dummy_data.append(conversation_dummy)
+
+    dummy_resp_data = []
+    for response in segmented_responses:
+        response_dummy = []
+        for segment in response:
+            response_dummy.append(None)
+        dummy_resp_data.append(response_dummy)
+    return dummy_data, dummy_data, dummy_resp_data
+
+def prepare_sentence_wise_data(fct, path_prefix, src, tgt, training_configuration):
+    segmented_conversation_contexts = segment_src(src)
+    segmented_responses = segment_tgt(tgt)
     if training_configuration != "baseline":
-        history_da_file = path_prefix + (".src.da" if training_configuration == "kd-pd-nrg" else ".src.swbd3.da")
-        history_resp_file = path_prefix + (".tgt.da" if training_configuration == "kd-pd-nrg" else ".tgt.swbd3.da")
-
-        history_da = [list(map(transform_da, l.strip().split("_eos")[:-1])) for l in
-                      open(history_da_file).readlines()]
-        history_da = [[each.replace("<>", "") for each in history_da[i]] for i in
-                      range(len(history_da))]
-        history_knowledge = itertools.repeat(itertools.repeat(""))
-        # history_knowledge = [l.strip().split("_eos")[:-1] for l in open(path_prefix + ".src.fct")]
-        # We load the DAs as an iterable to make it compatible with the baseline itertools repeat logic
-        resp_da = [transform_da(l.strip()).split() for l in open(history_resp_file).readlines()]
+        history_da, history_knowledge, resp_da = load_da_history_data(path_prefix, training_configuration)
     else:
-        history_da = itertools.repeat(itertools.repeat(None))
-        history_knowledge = itertools.repeat(itertools.repeat(None))
-        resp_da = itertools.repeat(itertools.repeat(None))
-    new_src = []
-    new_tgt = []
-    new_fct = []
-    new_resp_da = []
-    # for i in range(len(src)):
-    for i, (src_sentences, tgt_segments, fact, tgt_das) in enumerate(zip(segmented_sent, segmented_tgt, fct, resp_da)):
-        # src_sentences - previous turns,
-        # tgt_segments - segments of the current turn [[int]]
+        history_da, history_knowledge, resp_da = load_dummy_da_history(
+            segmented_conversation_contexts,
+            segmented_responses)
 
-        for j, (tgt_segment, tgt_da) in enumerate(zip(tgt_segments, tgt_das)):
-            # for jth sentence of the target speaker
-            if j != 0:
-                # append previous turns + the first (j - 1) segments of the current speaker
+    examples = []
 
-                new_src.append(src_sentences + [tgt_segments[:j]])
-            # the target is the beginning of the turn
-            # the appended history will have a <eot> token to distinguish the turn boundary
-            else:
-                #
-                new_src.append(src_sentences + ["<eot>"])
-            new_tgt.append(tgt_segment)
-            new_fct.append(fact)
+    for i in range(len(src)):
+        conversation_context = segmented_conversation_contexts[i]
 
-            new_resp_da.append(tgt_da)
-    context = [zip(s, h, k) for (s, h, k) in zip(new_src, history_da, history_knowledge)]
-    return list(zip(context, zip(new_tgt, new_resp_da, new_fct)))
+        for j in range(len(segmented_responses[i])):
+            # Previous turns + user's sentences
+            sentence_history = conversation_context + [segmented_responses[:j]]
+
+            sentence_act_history = history_da[i] + resp_da[:j]
+            sentence_knowledge_history = history_knowledge[i] + [fct[i] for _ in range(i)]
+
+            examples.append(
+                ((sentence_history, sentence_act_history, sentence_knowledge_history),
+                 (segmented_responses[i][j], resp_da[i][j], fct[i])))
+
+    return examples
 
 
 def prepare_turn_wise_data(fct, path_prefix, src, tgt, training_configuration):
