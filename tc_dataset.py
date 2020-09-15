@@ -521,10 +521,24 @@ class TopicalChatsSentGenerationDataset(TopicalChatsDataset):
         TODO: document this (Zach)
         """
         (history, (response, _, fact)) = self.dataset[index]
-        num_sents = len(response)
+        # num_sents = len(response)
         history = [h[0] for h in history]
-        history, fact = self.truncate_sequences(history, self.tokenizer.encode(fact))
-        return [{"history": history, "plan": [self.tokenizer.decode(fact)] * num_sents}]
+        history, fact = self.truncate_sequences(history, fact)
+        return [{"history": history, "plan": fact}]
+
+    def truncate_sequences(self, history, fact):
+        # Truncate history turns to reduce memory requirement
+        if len(history) > (2 * self.max_history + 1):
+            history = history[-(2 * self.max_history + 1):]
+
+        # Truncate facts to decrease overall input length
+        trunc_facts = []
+        for f in fact:
+            f = self.tokenizer.encode(f)
+            f = f[:min(len(f), self.max_fact_length)]
+            trunc_facts.append(self.tokenizer.decode(f))
+
+        return history, trunc_facts
 
     def prepare_generation_plan_for_sentence(self, history, fact, tokenizer):
         """

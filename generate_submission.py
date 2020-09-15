@@ -159,20 +159,20 @@ def collate_batch_elements(batch, tokenizer, args):
     return tensorized_input
 
 def get_sentence_loader(args, tokenizer):
-    if args.dataset_configuration == "dstc9":
-        topical_chat = get_dataset_sentence_generation(tokenizer, args.dataset_path, args.dataset_cache, args.training_configuration)
-    else:
-        topical_chat = augmented_tc_dataset(tokenizer, args.dataset_path, args.dataset_cache,
-                                            args.knowledge_index_path, args.training_configuration, args.knowledge_policy)
-
-    splits = list(topical_chat.keys())
-    for split in splits:
-        if split != args.split:
-            del topical_chat[split]
-    # topical_chat = torch.load("valid_freq_cache")
+    # if args.dataset_configuration == "dstc9":
+    #     topical_chat = get_dataset_sentence_generation(tokenizer, args.dataset_path, args.dataset_cache, args.training_configuration)
+    # else:
+    #     topical_chat = augmented_tc_dataset(tokenizer, args.dataset_path, args.dataset_cache,
+    #                                         args.knowledge_index_path, args.training_configuration, args.knowledge_policy)
+    #
+    # splits = list(topical_chat.keys())
+    # for split in splits:
+    #     if split != args.split:
+    #         del topical_chat[split]
+    topical_chat = torch.load("valid_freq_cache")
 
     if args.training_configuration == "baseline":
-        dataset = TopicalChatsSentGenerationDataset(topical_chat[args.split], tokenizer, SPECIAL_TOKENS, args)
+        dataset = TopicalChatsSentGenerationDataset(topical_chat, tokenizer, SPECIAL_TOKENS, args)
     else:
         dataset = TopicalChatsKDSentGenerationDataset(topical_chat[args.split], tokenizer, SPECIAL_TOKENS, args)
     sampler = torch.utils.data.distributed.DistributedSampler(dataset) if args.distributed else None
@@ -264,8 +264,8 @@ def generate_submissions_sent(args):
 
     tokenizer = tokenizer_class.from_pretrained(args.model_metadata_path)
 
-    data = torch.load(args.model_checkpoint + '/pytorch_model.bin', map_location=torch.device('cpu'))
-    # data = torch.load(args.model_checkpoint + '/pytorch_model.bin')
+    # data = torch.load(args.model_checkpoint + '/pytorch_model.bin', map_location=torch.device('cpu'))
+    data = torch.load(args.model_checkpoint + '/pytorch_model.bin')
 
     model = data["mymodel"]
     model.to(args.device)

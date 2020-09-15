@@ -120,8 +120,8 @@ if __name__ == '__main__':
     parser.add_argument('--model_metadata_path', type=str, default='./runs/bert_sentence_generation',
                         help='Path to the tokenizer and model configuration')
     args = parser.parse_args()
-    create_topical_chat_dict(args)
+    # create_topical_chat_dict(args)
 
-    # dataset = torch.load("valid_freq_cache")
-    #
-    # dataset
+    dataset = torch.load("valid_freq_cache")
+
+    dataset
