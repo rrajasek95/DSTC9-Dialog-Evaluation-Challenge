@@ -263,7 +263,9 @@ def generate_submissions_sent(args):
 
     tokenizer = tokenizer_class.from_pretrained(args.model_metadata_path)
 
+    # data = torch.load(args.model_checkpoint + '/pytorch_model.bin', map_location=torch.device('cpu'))
     data = torch.load(args.model_checkpoint + '/pytorch_model.bin')
+
     model = data["mymodel"]
     model.to(args.device)
 
@@ -356,25 +358,25 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset_path", type=str, default="processed_output",
                         help="Path or url of the dataset. If empty download from S3.")
-    parser.add_argument('--training_configuration', type=str, default="sentiment",
+    parser.add_argument('--training_configuration', type=str, default="baseline",
                         help="Training configuration to run",
                         choices=["baseline", "kd-pd-nrg", "kd-pd-nrg-swbd", "sentiment"])
-    parser.add_argument('--dataset_configuration', type=str, default="topical-chats",
+    parser.add_argument('--dataset_configuration', type=str, default="dstc9",
                         help="Configuration of dataset to load for training",
                         choices=["dstc9", "topical-chats"])
-    parser.add_argument('--generation_configuration', type=str, default='turn',
+    parser.add_argument('--generation_configuration', type=str, default='sentence',
                         choices=['turn', 'sentence'])
     parser.add_argument('--heuristic_policy', action='store_true',
                         help="Enable heuristic dialog policy for generation (as opposed to using ground truth)")
-    parser.add_argument('--knowledge_index_path', type=str, default="./tc_processed/knowledge_index.pkl",
+    parser.add_argument('--knowledge_index_path', type=str, default="./tc_processed/tc_knowledge_index_bert_all.pkl",
                         help="Path to knowledge index file")
-    parser.add_argument('--model_checkpoint', type=str, default="runs/topical_chats_gpt2/",
+    parser.add_argument('--model_checkpoint', type=str, default="runs/bert_sentence_generation/",
                         help="Path, url or short name of the model")
     parser.add_argument("--split", type=str,
                         choices=['valid_freq', 'test_freq', 'valid_rare', 'test_rare'],
                         default='valid_freq',
                         help='Split of topical chats to generate outputs for')
-    parser.add_argument('--model_metadata_path', type=str, default='runs/topical_chats_gpt2',
+    parser.add_argument('--model_metadata_path', type=str, default='./runs/bert_sentence_generation',
                         help='Path to the tokenizer and model configuration')
     parser.add_argument("--num_candidates", type=int, default=2, help="Number of candidates for training")
     parser.add_argument('--dataset_cache', type=str, default='./dataset_caches', help='Path or url of the dataset cache')
@@ -383,8 +385,9 @@ if __name__ == '__main__':
                         help='Number of fact tokens to include in the input')
     parser.add_argument('--valid_batch_size', type=int, default=4,
                         help='Batch size for generating outputs')
-    parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu",
-                        help="Device (cuda or cpu)")
+    # parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu",
+    #                     help="Device (cuda or cpu)")
+    parser.add_argument("--device", type=str, default="cpu")
     parser.add_argument("--local_rank", type=int, default=-1,
                         help="Local rank for distributed training (-1: not distributed)")
     parser.add_argument('--output_file_path', type=str, default='submissions/submissions.txt')

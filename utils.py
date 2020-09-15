@@ -378,7 +378,7 @@ def prepare_turn_data(agent_mapping, available_knowledge, conv_id, dialog_act, k
 
 
 def get_ranker_retriever(knowledge_policy, vec):
-    if knowledge_policy == "bert" or knowledge_policy =="bert_sentence":
+    if knowledge_policy == "bert" or knowledge_policy == "bert_sentence":
         return BertRankerRetriever(vec)
     elif knowledge_policy == "infersent":
         return InfersentRankerRetriever(vec)
