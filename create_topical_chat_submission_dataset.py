@@ -5,7 +5,7 @@ import utils
 from itertools import chain
 from pprint import pformat
 from copy import deepcopy
-
+import string
 
 import torch
 from torch.utils.data import DataLoader
@@ -71,35 +71,41 @@ def create_topical_chat_dict(args):
         with open(os.path.join(read_dir, split + '.json'), 'r') as data_file:
             reading_set.update(json.load(data_file))
     data = []
-    for conv_id in unique_keys:
-        convo_history_segments = []
+    cur_convo_id = keys[0]
+    turn_count = 0
+    convo_history = []
+    for conv_id in keys:
+        if cur_convo_id != conv_id:
+            turn_count = 0
+            cur_convo_id = conv_id
+            convo_history = []
         cur_convo = split_data[conv_id]
         agent_knowledge, agent_mapping = utils.prepare_reading_set_for_conversation(conv_id, reading_set)
-
-        turn_counter = 0
-        for turn in cur_convo["content"]:
-            turn_history = []
-            da_index = 0
-            for segment in turn["segments"]:
-                sentence = segment["text"]
-                current_segment_data = utils.prepare_sentence_knowledge_data(agent_mapping, conv_id, None, tokenizer,
-                                                                       turn, sentence, ranker, da_index)
-
-                if len(convo_history_segments) == turn_counter:
-                    convo_history_segments.append(turn_history)
-                else:
-                    convo_history_segments[turn_counter] = turn_history
-                convo_history_segments_copy = deepcopy(convo_history_segments)
-                context = (convo_history_segments_copy, None, None)
-
-                data.append((context, current_segment_data))
-                turn_history.append(current_segment_data[0])
-                da_index += 1
-            turn_counter += 1
+        turn = cur_convo["content"][turn_count]
+        turn_knowledge = []
+        sentences = []
+        for segment in turn["segments"]:
+            sentence = segment["text"]
+            sentences.append(sentence)
+            segment_knowledge = prepare_sentence_knowledge_data(agent_mapping, conv_id, None, tokenizer,
+                                                                   turn, sentence, ranker)
+            turn_knowledge.append(segment_knowledge)
+        cur_turn_data = sentences, None, turn_knowledge
+        history_copy = deepcopy(convo_history)
+        data.append((history_copy, cur_turn_data))
+        history = sentences, None, None
+        convo_history.append(history)
+        turn_count += 1
     torch.save(data, "valid_freq_cache")
 
+def clean(s):
+    return ''.join([c if c not in string.punctuation else ' ' for c in s.lower()])
 
 
+def prepare_sentence_knowledge_data(agent_mapping, conv_id, dialog_act, tokenizer, turn, sentence, ranker):
+    knowledge_sentence = ranker.get_top_fact(clean(sentence), conv_id, threshold=True)
+    original_knowledge_sentence = agent_mapping[turn["agent"]].get(knowledge_sentence, "")
+    return original_knowledge_sentence
 
 
 if __name__ == '__main__':
@@ -115,3 +121,7 @@ if __name__ == '__main__':
                         help='Path to the tokenizer and model configuration')
     args = parser.parse_args()
     create_topical_chat_dict(args)
+
+    # dataset = torch.load("valid_freq_cache")
+    #
+    # dataset
