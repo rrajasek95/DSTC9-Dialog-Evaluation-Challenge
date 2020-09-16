@@ -253,7 +253,9 @@ def generate_sentence_wise_output(model, tokenizer, dataset, example, args):
             output_so_far.append(prev.item())
         if len(output_so_far) >= args.max_length:
             break
-        output_so_far.append(special_tokens_ids[2])
+        # output_so_far.append(special_tokens_ids[1])
+        output_so_far.append(special_tokens_ids[4])
+
 
     return tokenizer.decode(output_so_far, skip_special_tokens=True)
 
@@ -384,7 +386,7 @@ if __name__ == '__main__':
     parser.add_argument('--max_history', type=int, default=2, help='Number of previous exchanges to keep in history')
     parser.add_argument('--max_fact_length', type=int, default=200,
                         help='Number of fact tokens to include in the input')
-    parser.add_argument('--valid_batch_size', type=int, default=4,
+    parser.add_argument('--valid_batch_size', type=int, default=1,
                         help='Batch size for generating outputs')
     # parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu",
     #                     help="Device (cuda or cpu)")

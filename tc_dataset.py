@@ -545,6 +545,7 @@ class TopicalChatsSentGenerationDataset(TopicalChatsDataset):
         TODO: document this (Zach)
         """
         bos, eos, speaker1, speaker2, end = tokenizer.convert_tokens_to_ids((self.special_tokens[:-2]))
+        eot = tokenizer.convert_tokens_to_ids((self.special_tokens[-1]))
         segmented_history = []
         for i, history_turn in enumerate(history):
             # interleave end of sentence markers between segments
@@ -552,7 +553,7 @@ class TopicalChatsSentGenerationDataset(TopicalChatsDataset):
                 [tokenizer.encode(turn_segment) + [end] for turn_segment in history_turn[:-1]] + [
                     tokenizer.encode(history_turn[-1])]
             ))
-
+            segments = segments + [eot]
             segmented_history.append(segments)
 
 
