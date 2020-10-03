@@ -169,7 +169,7 @@ def get_sentence_loader(args, tokenizer):
     # for split in splits:
     #     if split != args.split:
     #         del topical_chat[split]
-    topical_chat = torch.load("valid_freq_cache")
+    topical_chat = torch.load("test_freq_cache")
 
     if args.training_configuration == "baseline":
         dataset = TopicalChatsSentGenerationDataset(topical_chat, tokenizer, SPECIAL_TOKENS, args)

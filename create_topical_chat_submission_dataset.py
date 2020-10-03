@@ -115,7 +115,7 @@ def create_topical_chat_dict(args):
             history = sentences, None, None
             convo_history.append(history)
             turn_count += 1
-        torch.save(data, "valid_freq_cache")
+        torch.save(data, "test_freq_cache")
 
 def clean(s):
     return ''.join([c if c not in string.punctuation else ' ' for c in s.lower()])
@@ -159,9 +159,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset_path", type=str, default="./",
                         help="Path of the cached Topical Chat Dataset")
-    parser.add_argument('--key_file', type=str, default="processed_output/valid_freq.keys",
+    parser.add_argument('--key_file', type=str, default="processed_output/test_freq.keys",
                         help="path to key file of dstc9")
-    parser.add_argument("--knowledge_policy", type=str, default="bert_sentence", choices=["tf_idf", "embeddings", "infersent", "bert"])
+    parser.add_argument("--knowledge_policy", type=str, default="bert_sentence", choices=["tf_idf", "embeddings", "infersent", "bert", "bert_sentence"])
     parser.add_argument('--knowledge_index_path', type=str, default="./tc_processed/tc_knowledge_index_bert_all.pkl",
                         help="Path to knowledge index file")
     parser.add_argument('--model_metadata_path', type=str, default='./runs/bert_sentence_generation',
@@ -171,6 +171,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
     # create_topical_chat_dict(args)
 
-    dataset = torch.load("valid_freq_cache")
+    dataset = torch.load("test_freq_cache")
 
     dataset
