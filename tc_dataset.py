@@ -90,6 +90,10 @@ class TopicalChatsDataset(Dataset):
         Considerations for design:
         1. Topical chat examples are created by adding a response every turn
         2. Last turn is always speaker2
+
+        Reference:
+        https://huggingface.co/transformers/model_doc/gpt2.html?highlight=gpt2#transformers.GPT2DoubleHeadsModel
+        https://huggingface.co/transformers/model_doc/gpt2.html?highlight=gpt2#transformers.GPT2LMHeadModel
         """
 
         bos, eos, speaker1, speaker2 = tokenizer.convert_tokens_to_ids((self.special_tokens[:4]))
