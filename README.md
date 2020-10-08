@@ -26,6 +26,9 @@ Scripts to train Seq2Seq and Transformer models on the Amazon Topical-Chat Corpu
 
 The pre-processed data can be found in `data.zip`. If you would like to use a different pre-processing strategy, please download the original data from [here](https://github.com/alexa/alexa-prize-topical-chat-dataset/).
 
+The dataset preparation code is split between the `utils.py` file and the `tc_dataset.py`. The data loading and 
+tokenization is done in `utils.py` while the data preparation to feed into the model is done in `tc_dataset.py`.
+
 ### Contact
 
 If you experience any issues with this code, please contact me at mehrishikib@gmail.com
