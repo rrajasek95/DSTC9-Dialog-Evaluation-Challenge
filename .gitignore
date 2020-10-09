@@ -1,3 +1,8 @@
+
+*.pyc
+.idea/
+transformers/
+
 DialogueAct-Tagger/
 DialogueAct_Tagger/
 DA_Classifier/
