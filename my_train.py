@@ -22,10 +22,23 @@ import os
 
 
 import argparse
+from pprint import pformat
+
+
+import trainer
+import torch
+
+from gpt2 import GPT2DoubleHeadsModel
+from transformers import AdamW, GPT2Tokenizer
+from torch.utils.tensorboard import SummaryWriter
+from train_util.scheduler import PiecewiseLinearLR
+from utils import CONFIG_NAME
+
+
 import itertools
 
 from collections import defaultdict
-from pprint import pformat
+
 from itertools import chain
 
 import pickle
@@ -39,29 +52,25 @@ from sklearn.metrics.pairwise import linear_kernel
 from tqdm import tqdm
 
 
-from transformers import AdamW, GPT2Tokenizer
-
-import trainer
 
 import random
 import math
 
-import torch
+
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-from transformers import AdamW, GPT2Tokenizer
-from gpt2 import GPT2DoubleHeadsModel
+
 
 from torch.cuda import amp
 from torch.nn import CrossEntropyLoss
-from torch.utils.tensorboard import SummaryWriter
+
 from tqdm.auto import tqdm
 
 
 from train_util.decode import top_filtering
 from train_util.metrics import RunningMetric, RunningLambdaMetric, MetricLambda
-from train_util.scheduler import PiecewiseLinearLR
-from utils import get_dataset, GlobalStepCounter, CONFIG_NAME, augmented_tc_dataset, make_path
+
+
 
 
 from tc_dataset import TopicalChatsDataset, TopicalChatsKDDataset, TopicalChatsSentimentDataset, \
