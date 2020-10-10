@@ -255,25 +255,33 @@ def make_example(tokenizer, tgt, src, fct):
     }
     return ex
 
-def get_data_loaders(args, tokenizer, special_tokens):
+def get_data_loaders(args, tokenizer, special_tokens,):
 
     loaders = {}
     for name, data_path, batch_size in [
         ("train", args.train_dataset_path, args.train_batch_size),
         ("valid", args.valid_dataset_path, args.valid_batch_size)]:
 
-        # Splitting history into multiple sentences for ease of further processing
-        # list list string
-        src = [l.strip().split("_eos")[:-1] for l in read_lines(f"{data_path}.src")]
-        # list string
-        tgt = [l.strip().replace("_go", "").replace("_eos", "") for l in read_lines(f"{data_path}.tgt")]
-        # list string
-        fct = [l.strip() for l in read_lines(f"{data_path}.fct")]
+        cache_path = f"{data_path}.examples.pt"
+        if cache_path and os.path.isfile(cache_path):
+            logger.info(f"Load tokenized dataset from cache at {cache_path}")
+            examples = torch.load(cache_path)
+        else:
+            logger.info(f"Loading dataset from {data_path}")
+            # Splitting history into multiple sentences for ease of further processing
+            # list list string
+            src = [l.strip().split("_eos")[:-1] for l in read_lines(f"{data_path}.src")]
+            # list string
+            tgt = [l.strip().replace("_go", "").replace("_eos", "") for l in read_lines(f"{data_path}.tgt")]
+            # list string
+            fct = [l.strip() for l in read_lines(f"{data_path}.fct")]
 
-        examples = []
-        for s, t, f in zip(src, tgt, fct):
-            e = make_example(tokenizer, t, s, f)
-            examples.append(e)
+            examples = []
+            for s, t, f in zip(src, tgt, fct):
+                e = make_example(tokenizer, t, s, f)
+                examples.append(e)
+
+            torch.save(examples, cache_path)
 
         dataset = DatasetBase(examples, tokenizer, special_tokens, args)
         loaders[name] = DataLoader(dataset, sampler=None, batch_size=batch_size,
