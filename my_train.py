@@ -211,19 +211,19 @@ def run_evaluation(model, val_loader, tokenizer, writer, args):
 
 def run_training(model, optimizer, scheduler, loaders, tokenizer, writer, args):
     print("run_training() ...")
-    train_loader, val_loader, train_sampler, valid_sampler = loaders
+    #train_loader, val_loader, train_sampler, valid_sampler = loaders
 
-
+    train_loader, val_loader = loaders["train"], loaders["valid"]
     step_counter = GlobalStepCounter()
 
     if args.eval_before_start:
         run_evaluation(model, val_loader, tokenizer, writer, args)
 
     for epoch in range(args.n_epochs):
-        if args.distributed:
-            # Ensures that the sampler splits the data properly
-            train_sampler.set_epoch(epoch)
-            valid_sampler.set_epoch(epoch)
+        #if args.distributed:
+        #    # Ensures that the sampler splits the data properly
+        #    train_sampler.set_epoch(epoch)
+        #    valid_sampler.set_epoch(epoch)
 
         # Run training step
         run_train(model, optimizer, scheduler, train_loader, writer, step_counter, args)
