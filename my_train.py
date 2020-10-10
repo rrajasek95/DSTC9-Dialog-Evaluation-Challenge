@@ -401,6 +401,7 @@ def train():
         # Setup data parallel version of the model to make
         # use of multi-GPU
         model = torch.nn.DataParallel(model)
+
     model.to(args.device)
 
     optimizer = AdamW(model.parameters(), lr=args.lr, correct_bias=True)
