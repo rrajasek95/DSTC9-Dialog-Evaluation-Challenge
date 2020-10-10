@@ -25,7 +25,7 @@ from collections import defaultdict
 from torch.utils.data import DataLoader
 from transformers import AdamW, GPT2Tokenizer
 
-from base_base_dataset import DatasetBase
+from dataset_base import DatasetBase
 
 
 logger = logging.getLogger(__file__)
@@ -96,11 +96,12 @@ def sample_candidates(args, dataset):
 
     return candidates
 
-MODEL_INPUTS = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "token_type_ids"]
-PADDED_INPUTS = ["input_ids", "lm_labels", "token_type_ids"]
+
+
 
 def pad_dataset(dataset, padding=0):
     """ Pad the dataset. This could be optimized by defining a Dataset class and padding at the batch level, but this is simpler. """
+    PADDED_INPUTS = ["input_ids", "lm_labels", "token_type_ids"]
     max_l = max(len(x) for x in dataset["input_ids"])
     for name in PADDED_INPUTS:
         dataset[name] = [x + [padding if name != "lm_labels" else -100] * (max_l - len(x)) for x in dataset[name]]
@@ -138,6 +139,8 @@ def collate_batch_elements(batch, tokenizer, args, special_tokens):
     # "lm_labels": [batch size, num_cands, seq_len]
     # "mc_labels": [batch_size]
     # "token_type_ids": [batch_size, num_cands, seq_len]
+
+    MODEL_INPUTS = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "token_type_ids"]
 
     batch_size = tuple([len(batch_inputs[MODEL_INPUTS[0]])//args.num_candidates])
     for input_name in MODEL_INPUTS:
@@ -224,7 +227,7 @@ def main():
 
 
     train_loader = DataLoader(dataset, sampler=None, batch_size=4,
-                              collate_fn=lambda x: collate_batch_elements(x, tokenizer, args, SPECIAL_TOKENS),
+                              collate_fn=lambda x: dataset.collate_batch_elements(x, tokenizer, args, SPECIAL_TOKENS),
                               shuffle=True)
 
 
