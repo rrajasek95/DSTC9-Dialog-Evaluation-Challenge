@@ -7,9 +7,8 @@ from pprint import pformat
 import torch
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
-from transformers import OpenAIGPTTokenizer, GPT2Tokenizer, OpenAIGPTDoubleHeadsModel
+from transformers import GPT2Tokenizer
 
-from gpt2 import GPT2DoubleHeadsModel
 from tc_dataset import TopicalChatsDataset, TopicalChatsKDDataset, TopicalChatsSWBDDataset, \
     TopicalChatsSentimentDataset, TopicalChatsSentGenerationDataset, TopicalChatsKDSentGenerationDataset
 from train_util.decode import top_filtering
@@ -354,6 +353,9 @@ def save_outputs_and_plan(all_das, args, outputs):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
+    parser.add_argument('--gpt2_variant', type=str, default="vanilla",
+                        help="Variant of the GPT2 architecture to train",
+                        choices=['vanilla', 'adapter'])
     parser.add_argument("--dataset_path", type=str, default="processed_output",
                         help="Path or url of the dataset. If empty download from S3.")
     parser.add_argument('--training_configuration', type=str, default="sentiment",
