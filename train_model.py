@@ -32,6 +32,7 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from transformers import AdamW, GPT2Tokenizer
 from gpt2 import GPT2DoubleHeadsModel
+import transformers_src.modeling_gpt2_adapter as adapter
 
 from tc_dataset import TopicalChatsDataset, TopicalChatsKDDataset, TopicalChatsSentimentDataset, \
     TopicalChatsDatasetSent, TopicalChatsKDSentDataset
@@ -409,7 +410,10 @@ def save_model_config(model, tokenizer, args):
 
 def train():
     parser = argparse.ArgumentParser()
-
+    parser.add_argument('--gpt2_variant', type=str, default="vanilla",
+                        help="Variant of GPT2 to train",
+                        choices=['vanilla', 'adapter']
+                        )
     parser.add_argument("--dataset_path", type=str, default="processed_output",
                         help="Path or url of the dataset. If empty download from S3.")
     parser.add_argument('--training_configuration', type=str, default="baseline",
@@ -505,6 +509,8 @@ def train():
         # so we use the original variant of the class for training
         import transformers.modeling_gpt2 as mgpt2
         model_class = mgpt2.GPT2DoubleHeadsModel
+    elif args.gpt2_variant == 'adapter':
+        model_class = adapter.GPT2DoubleHeadsModel
     else:
         # Load the model after the tokenizer. We hit an OOM error if we try to pre-load the model
         model_class = GPT2DoubleHeadsModel

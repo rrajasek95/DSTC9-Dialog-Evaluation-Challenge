@@ -23,6 +23,7 @@ import warnings
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
+from torch.utils.checkpoint import checkpoint
 
 from .activations import ACT2FN
 from .configuration_gpt2 import GPT2Config
@@ -232,9 +233,25 @@ class Block(nn.Module):
         self.attn = Attention(nx, n_ctx, config, scale)
         self.ln_2 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
         self.mlp = MLP(4 * nx, config)
+        self.ln_3 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
+
+        bottleneck_size = 200
+        self.mlp_2 = MLP(bottleneck_size, config)
+
+        self._freeze_weights()
+
+    def _freeze_weights(self):
+        print("Freezing weights")
+        for parameter in self.parameters():
+            """
+            Houlsby et al. 2019 recommends that layer norm weights be fine-tuned along with the adapter
+            weights. This ensures that the model is able to adapt to the underlying input.
+            """
+            if parameter not in [self.ln_1, self.ln_2, self.ln_3, self.mlp_2]:
+                parameter.requires_grad_(False)
 
     def forward(
-        self, x, layer_past=None, attention_mask=None, head_mask=None, use_cache=False, output_attentions=False,
+        self, x, layer_past=None, attention_mask=None, head_mask=None, use_cache=True, output_attentions=False,
     ):
         output_attn = self.attn(
             self.ln_1(x),
@@ -250,8 +267,12 @@ class Block(nn.Module):
         m = self.mlp(self.ln_2(x))
         x = x + m
 
+        # Residual adapter is another bottleneck projection MLP layer
+        a = self.mlp_2(self.ln_3(x))
+        x = x + a
+
         outputs = [x] + output_attn[1:]
-        return outputs  # x, present, (attentions)
+        return tuple(outputs)  # x, present, (attentions)
 
 
 class GPT2PreTrainedModel(PreTrainedModel):
@@ -484,14 +505,16 @@ class GPT2Model(GPT2PreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states.view(*output_shape),)
 
-            outputs = block(
-                hidden_states,
-                layer_past=layer_past,
-                attention_mask=attention_mask,
-                head_mask=head_mask[i],
-                use_cache=use_cache,
-                output_attentions=output_attentions,
-            )
+            # outputs = block(
+            #     hidden_states,
+            #     layer_past=layer_past,
+            #     attention_mask=attention_mask,
+            #     head_mask=head_mask[i],
+            #     use_cache=use_cache,
+            #     output_attentions=output_attentions,
+            # )
+
+            outputs = checkpoint(block, hidden_states, layer_past, attention_mask, head_mask[i])
 
             hidden_states, present = outputs[:2]
             if use_cache is True:
