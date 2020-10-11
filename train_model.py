@@ -485,6 +485,12 @@ def train():
     logger.info("Arguments: %s", pformat(args))
 
     logger.info("Prepare tokenizer, pretrained model and optimizer.")
+
+    if args.gpt2_variant == "adapter":
+        from transformers_src import AdamW, GPT2Tokenizer
+
+    else:
+        from transformers import AdamW, GPT2Tokenizer
     tokenizer_class = GPT2Tokenizer
     tokenizer = tokenizer_class.from_pretrained(args.model_checkpoint)
 
@@ -507,14 +513,11 @@ def train():
         # Gradient checkpointing significantly slows down distributed training,
         # so we use the original variant of the class for training
         import transformers.modeling_gpt2 as mgpt2
-        from transformers import AdamW, GPT2Tokenizer
         model_class = mgpt2.GPT2DoubleHeadsModel
     elif args.gpt2_variant == 'adapter':
-        from transformers_src import AdamW, GPT2Tokenizer
         import transformers_src.modeling_gpt2_adapter as adapter
         model_class = adapter.GPT2DoubleHeadsModel
     else:
-        from transformers import AdamW, GPT2Tokenizer
         # Load the model after the tokenizer. We hit an OOM error if we try to pre-load the model
         model_class = GPT2DoubleHeadsModel
 
