@@ -484,11 +484,7 @@ def train():
 
     logger.info("Prepare tokenizer, pretrained model and optimizer.")
 
-    if args.gpt2_variant == "adapter":
-        from transformers_src import AdamW, GPT2Tokenizer
-
-    else:
-        from transformers import AdamW, GPT2Tokenizer
+    from transformers import AdamW, GPT2Tokenizer
     tokenizer_class = GPT2Tokenizer
     tokenizer = tokenizer_class.from_pretrained(args.model_checkpoint)
 
