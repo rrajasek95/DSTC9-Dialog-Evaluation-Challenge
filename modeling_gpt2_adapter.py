@@ -25,10 +25,10 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 from torch.utils.checkpoint import checkpoint
 
-from .activations import ACT2FN
-from .configuration_gpt2 import GPT2Config
-from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_utils import (
+from transformers.activations import ACT2FN
+from transformers.configuration_gpt2 import GPT2Config
+from transformers.file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
+from transformers.modeling_utils import (
     Conv1D,
     PreTrainedModel,
     SequenceSummary,
