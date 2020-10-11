@@ -30,7 +30,7 @@ from tqdm.auto import tqdm
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-from transformers import AdamW, GPT2Tokenizer
+
 from gpt2 import GPT2DoubleHeadsModel
 
 from tc_dataset import TopicalChatsDataset, TopicalChatsKDDataset, TopicalChatsSentimentDataset, \
@@ -507,11 +507,14 @@ def train():
         # Gradient checkpointing significantly slows down distributed training,
         # so we use the original variant of the class for training
         import transformers.modeling_gpt2 as mgpt2
+        from transformers import AdamW, GPT2Tokenizer
         model_class = mgpt2.GPT2DoubleHeadsModel
     elif args.gpt2_variant == 'adapter':
+        from transformers_src import AdamW, GPT2Tokenizer
         import transformers_src.modeling_gpt2_adapter as adapter
         model_class = adapter.GPT2DoubleHeadsModel
     else:
+        from transformers import AdamW, GPT2Tokenizer
         # Load the model after the tokenizer. We hit an OOM error if we try to pre-load the model
         model_class = GPT2DoubleHeadsModel
 
