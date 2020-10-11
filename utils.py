@@ -41,8 +41,7 @@ def segment_tgt(tgt):
     nlp.add_pipe(sentencizer)
     output = []
     for turn in tgt:
-        doc = nlp(turn)
-        output.append([each.text for each in doc.sents])
+        output.append([each.text for each in nlp(turn).sents])
     return output
 
 def load_data(dataset_path, split, training_configuration, generation_config):
@@ -97,7 +96,7 @@ def load_da_history_data(path_prefix, training_configuration):
     history_knowledge = itertools.repeat(itertools.repeat(""))
     # history_knowledge = [l.strip().split("_eos")[:-1] for l in open(path_prefix + ".src.fct")]
     # We load the DAs as an iterable to make it compatible with the baseline itertools repeat logic
-    resp_da = [transform_da(l.strip()).split() for l in open(history_resp_file).readlines()]
+    resp_da = [transform_da(l.strip().replace("_go ", "").replace(" _eos", "")).split(" ") for l in open(history_resp_file).readlines()]
 
     return history_da, history_knowledge, resp_da
 
@@ -135,16 +134,18 @@ def prepare_sentence_wise_data(fct, path_prefix, src, tgt, training_configuratio
 
     examples = []
 
-    for i in range(len(src)):
+    for i in range(len(segmented_conversation_contexts)):
         conversation_context = segmented_conversation_contexts[i]
-
         for j in range(len(segmented_responses[i])):
             # Previous turns + user's sentences
-            sentence_history = conversation_context + [segmented_responses[:j]]
+            sentence_history = conversation_context + segmented_responses[:j]
 
-            sentence_act_history = history_da[i] + resp_da[:j]
-            sentence_knowledge_history = history_knowledge[i] + [fct[i] for _ in range(i)]
-
+            if training_configuration != "baseline":
+                sentence_act_history = history_da[i] + resp_da[i][:j]
+                sentence_knowledge_history = [fct[i] if j != 0 else ""]
+            else:
+                sentence_act_history = None
+                sentence_knowledge_history = [fct[i] if j != 0 else ""]
             examples.append(
                 ((sentence_history, sentence_act_history, sentence_knowledge_history),
                  (segmented_responses[i][j], resp_da[i][j], fct[i])))
