@@ -11,7 +11,7 @@ from nltk import word_tokenize, sent_tokenize
 
 from encoder.fb_models import InferSent
 from glove.glove_utils import get_cosine_similarity_embs_all
-from knowledge_index import extract_fact_set, clean
+from knowledge_index import extract_fact_set, clean, extract_el_fact_set
 from sentence_transformers import SentenceTransformer
 
 
@@ -93,6 +93,12 @@ def get_tfidf_conv_knowledge(conv_id, test_freq_reading_set):
     }
     return agent_knowledge
 
+def get_ne_based_knowledge(conv_id, test_freq_reading_set):
+    conv_reading_set = test_freq_reading_set[conv_id]
+    fs1 = extract_el_fact_set(conv_reading_set["agent_1"])
+    fs2 = extract_el_fact_set(conv_reading_set["agent_2"])
+
+    pass
 
 def generate_knowledge_selection_generic(args):
     if args.knowledge_selection_policy == "infersent":
