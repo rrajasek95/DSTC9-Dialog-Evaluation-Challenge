@@ -513,7 +513,7 @@ def train():
         import transformers.modeling_gpt2 as mgpt2
         model_class = mgpt2.GPT2DoubleHeadsModel
     elif args.gpt2_variant == 'adapter':
-        import transformers_src.modeling_gpt2_adapter as adapter
+        import modeling_gpt2_adapter as adapter
         model_class = adapter.GPT2DoubleHeadsModel
     else:
         from gpt2 import GPT2DoubleHeadsModel
