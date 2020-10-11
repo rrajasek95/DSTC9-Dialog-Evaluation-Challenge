@@ -377,7 +377,6 @@ class TopicalChatsKDDataset(TopicalChatsDataset):
             instance = self.build_input_from_segments(history, candidate, action_plan, self.tokenizer, lm_labels)
             instance['das_to_return'] = das_to_return
             instances.append(instance)
-
         return instances
 
 class TopicalChatsKDSentDataset(TopicalChatsDatasetSent):
@@ -451,7 +450,7 @@ class TopicalChatsKDSentDataset(TopicalChatsDatasetSent):
         """
         Knowledge Driven Sentence data format.
 
-        Each example comprises of the following:
+        Each example is a tuple of the following:
         1. history_tuple:
             1. conversation_history - List[List[List[int]]]
                 1. Highest list level corresponds to turns in the conversation
@@ -481,9 +480,10 @@ class TopicalChatsKDSentDataset(TopicalChatsDatasetSent):
         """
         (history, (response, mezza_das, knowledge)) = self.dataset[index]
 
-        dialog_state = self._construct_dialog_state(history)
+        conversation_history = history[0]
         das_to_return = []
         if self.inference:
+            dialog_state = self._construct_dialog_state(history)
             """
             During inference time, there is no ground truth utterance to 
             choose the appropriate knowledge on. So we use a heuristic policy 
@@ -492,7 +492,7 @@ class TopicalChatsKDSentDataset(TopicalChatsDatasetSent):
             mezza_das, knowledge = self._execute_heuristic_policy(dialog_state)
             das_to_return = [f"<{da}>" for da in mezza_das]
             mezza_das = self.tokenizer.encode([f"<{da}>" for da in mezza_das])
-        history, fact = self.truncate_sequences(dialog_state["turn_history"], knowledge)
+        history, fact = self.truncate_sequences(conversation_history, knowledge)
 
         candidates = self.sample_candidates(self.dataset, index)
         candidates.append(response)
