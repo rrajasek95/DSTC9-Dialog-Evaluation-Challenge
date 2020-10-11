@@ -68,6 +68,35 @@ def extract_fact_set(factsets):
             sentences.append(clean(summarized_wiki))
     return sentences
 
+def process_knowledge(knowledge_item):
+    return {
+        "text": clean(knowledge_item["text"]),
+        "dbpedia_entities": knowledge_item["dbpedia_entities"]
+    }
+
+def extract_el_fact_set(factsets):
+
+    knowledge = []
+
+    for id, data in factsets.items():
+
+        fun_facts = data.get('fun_facts')
+
+        if fun_facts:
+            for fact in fun_facts:
+                knowledge.append(process_knowledge(fact))
+
+        short_wiki = data.get("shortened_wiki_lead_section")
+
+        if short_wiki:
+            knowledge.append(process_knowledge(short_wiki))
+
+        summarized_wiki = data.get("summarized_wiki_lead_section")
+
+        if summarized_wiki:
+            knowledge.append(process_knowledge(summarized_wiki))
+
+    return knowledge
 
 def load_split_reading_set(data_file_path, split):
     split_reading_set_path = os.path.join(
