@@ -235,12 +235,15 @@ class Block(nn.Module):
         self.mlp = MLP(4 * nx, config)
         self.ln_3 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
 
+        # TODO: Add configurable bottleneck sizes
         bottleneck_size = 200
         self.mlp_2 = MLP(bottleneck_size, config)
 
         self._freeze_weights()
 
     def _freeze_weights(self):
+        # TODO: unfreeze attention masked bias since it's initialized
+        #       afresh for fine-tuning
         print("Freezing weights")
         for parameter in self.parameters():
             """
@@ -263,12 +266,15 @@ class Block(nn.Module):
         )
         a = output_attn[0]  # output_attn: a, present, (attentions)
 
+        # TODO: Experiment with adding an adapter before the Multi-Head Attention layer
         x = x + a
         m = self.mlp(self.ln_2(x))
         x = x + m
 
         # Residual adapter is another bottleneck projection MLP layer
         a = self.mlp_2(self.ln_3(x))
+
+        # TODO: test if adding a Layer norm after adapter layer improves performance
         x = x + a
 
         outputs = [x] + output_attn[1:]
