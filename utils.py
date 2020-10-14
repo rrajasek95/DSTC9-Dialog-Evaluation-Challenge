@@ -350,11 +350,14 @@ def prepare_turn_data(agent_mapping, available_knowledge, conv_id, dialog_act, k
     knowledge_sentence = ""
     for segment in turn["segments"]:
         sentence = segment["text"]
-        # With regards to knowledge selection, this is a highly approximate heuristic.
-        # Both Gopalakrishnan et al. 2019 and Hedayatnia et al. 2020
-        # acknowledge they don't have anything better for this issue
 
+        if knowledge_policy == "none":
+            # Always return an empty sentence
+            break
         if knowledge_policy == "tf_idf":
+            # With regards to knowledge selection, this is a highly approximate heuristic.
+            # Both Gopalakrishnan et al. 2019 and Hedayatnia et al. 2020
+            # acknowledge they don't have anything better for this issue
             text_tfidf = vec.transform([clean(sentence)])
             """
             In this section, we find the knowledge sentence that is closest
