@@ -118,7 +118,7 @@ TRAINING_CONFIG_LABEL_SCHEME = {
     "baseline": "switchboard_da",
     "sentiment": "sentiment",
     "kd-pd-nrg": "mezza_da",
-    "kd-pd-nrg-swbd": "switchboard_da"
+    "kd-pd-nrg-swbd": "swbd_da_v3"  # The key for the newer labels were updated to avoid overwriting original labels
 }
 
 ATTR_TO_SPECIAL_TOKEN = {
