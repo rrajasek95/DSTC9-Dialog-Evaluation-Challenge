@@ -525,16 +525,31 @@ class TopicalChatsSentGenerationDataset(TopicalChatsDataset):
         TODO: document this (Zach)
         """
         (history, (response, _, fact)) = self.dataset[index]
-        num_sents = len(response)
+        # num_sents = len(response)
         history = [h[0] for h in history]
-        history, fact = self.truncate_sequences(history, self.tokenizer.encode(fact))
-        return [{"history": history, "plan": [self.tokenizer.decode(fact)] * num_sents}]
+        history, fact = self.truncate_sequences(history, fact)
+        return [{"history": history, "plan": fact}]
+
+    def truncate_sequences(self, history, fact):
+        # Truncate history turns to reduce memory requirement
+        if len(history) > (2 * self.max_history + 1):
+            history = history[-(2 * self.max_history + 1):]
+
+        # Truncate facts to decrease overall input length
+        trunc_facts = []
+        for f in fact:
+            f = self.tokenizer.encode(f)
+            f = f[:min(len(f), self.max_fact_length)]
+            trunc_facts.append(self.tokenizer.decode(f))
+
+        return history, trunc_facts
 
     def prepare_generation_plan_for_sentence(self, history, fact, tokenizer):
         """
         TODO: document this (Zach)
         """
         bos, eos, speaker1, speaker2, end = tokenizer.convert_tokens_to_ids((self.special_tokens[:-2]))
+        eot = tokenizer.convert_tokens_to_ids((self.special_tokens[-1]))
         segmented_history = []
         for i, history_turn in enumerate(history):
             # interleave end of sentence markers between segments
@@ -542,7 +557,7 @@ class TopicalChatsSentGenerationDataset(TopicalChatsDataset):
                 [tokenizer.encode(turn_segment) + [end] for turn_segment in history_turn[:-1]] + [
                     tokenizer.encode(history_turn[-1])]
             ))
-
+            segments = segments + [eot]
             segmented_history.append(segments)
 
 
