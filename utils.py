@@ -3,21 +3,21 @@ import json
 import logging
 import os
 import pickle
+from copy import deepcopy
 
+import pandas as pd
 import torch
 from nltk import word_tokenize
 from sklearn.metrics.pairwise import linear_kernel
-from tqdm import tqdm
-from glove.glove_utils import get_max_cosine_similarity, get_max_cosine_similarity_embs_models
-from knowledge_index import clean
-from sentence_transformers import SentenceTransformer
 from spacy.lang.en import English
+from tqdm import tqdm
+
+from knowledge_index import clean
 from pd_nrg.ranker import BertRankerRetriever, InfersentRankerRetriever, EmbRankerRetriever
-from copy import deepcopy
+
 CONFIG_NAME = 'config.json'
 
 logger = logging.getLogger(__file__)
-
 
 def transform_da(da_str):
     return " ".join([f"<{da}>" for da in da_str.split(" ")])
@@ -486,6 +486,56 @@ def augmented_tc_dataset(tokenizer, dataset_path, dataset_cache, knowledge_index
 
     return dataset
 
+def process_athena_questions_split(tokenizer, topic_question_data):
+
+    examples = []
+
+    def tokenize(obj):
+        if obj is None:
+            return None
+        if isinstance(obj, str):
+            return tokenizer.convert_tokens_to_ids(tokenizer.tokenize(obj))
+        if isinstance(obj, tuple):
+            return tuple(tokenize(o) for o in obj)
+        return list(tokenize(o) for o in obj)
+
+    for index, item in topic_question_data.iterrows():
+
+        context = item['text']
+        athena_response = item['response']
+        # All contexts are single turn
+
+        example = ([context], athena_response)
+        examples.append(tokenize(example))
+
+    return examples
+
+
+def load_athena_user_questions_data(tokenizer, dataset_path, dataset_cache, topic):
+    """
+    Process the Athena user questions data
+
+    :param tokenizer:
+    :param dataset_path:
+    :param dataset_cache:
+    :return:
+    """
+    if dataset_cache and os.path.isfile(dataset_cache):
+        logger.info("Load tokenized Athena dataset from cache at %s", dataset_cache)
+        dataset = torch.load(dataset_cache)
+    else:
+        logger.info("Cached data not found, creating the dataset object")
+
+
+        topic_file_path = os.path.join(dataset_path, f'{topic}.tsv')
+        topic_question_data = pd.read_csv(topic_file_path, sep='\t')
+        dataset = process_athena_questions_split(tokenizer, topic_question_data)
+
+        if dataset_cache:
+            logger.info("Saving tokenized dataset to cache %s", dataset_cache)
+            torch.save(dataset, dataset_cache)
+
+    return dataset
 
 class GlobalStepCounter(object):
     def __init__(self):
