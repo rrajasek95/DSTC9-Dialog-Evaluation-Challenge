@@ -263,7 +263,7 @@ def process_split_turn(dataset_path, split, tokenizer, index, knowledge_policy, 
     path_prefix = os.path.join(dataset_path, split)
     reading_set_path = os.path.join(dataset_path, 'reading_sets', f'{split}.json')
     data = []
-    with open(path_prefix + '_full_anno.json', 'r') as annotated_split_file, \
+    with open(path_prefix + '.json', 'r') as annotated_split_file, \
             open(reading_set_path, 'r') as reading_set_file:
         annotated_data = json.load(annotated_split_file)
         reading_set = json.load(reading_set_file)
@@ -306,7 +306,7 @@ def process_split_sentence(dataset_path, split, tokenizer, index, ranker):
     # resp_da = itertools.repeat(itertools.repeat(None))
 
     eot_tag = tokenizer.encode("<eot>")
-    with open(path_prefix + '_full_anno.json', 'r') as annotated_split_file, \
+    with open(path_prefix + '.json', 'r') as annotated_split_file, \
             open(reading_set_path, 'r') as reading_set_file:
         annotated_data = json.load(annotated_split_file)
         reading_set = json.load(reading_set_file)
@@ -501,7 +501,7 @@ class GlobalStepCounter(object):
 def generate_references_for_split(dataset_path, dataset_cache, split, output_path):
     path_prefix = os.path.join(dataset_path, split)
     responses = []
-    with open(path_prefix + '_full_anno.json', 'r') as annotated_split_file:
+    with open(path_prefix + '.json', 'r') as annotated_split_file:
         annotated_data = json.load(annotated_split_file)
         for conv_id, conv_data in tqdm(annotated_data.items()):
             for turn in conv_data["content"]:
