@@ -363,7 +363,9 @@ class TopicalChatsKDDataset(TopicalChatsDataset):
         candidates = self.sample_candidates(self.dataset, index)
         candidates.append(response)
         if self.dataset_configuration != "dstc9":
-            encoded_das = self.tokenizer.encode([f"<{da['da']}>" for da in mezza_das])
+            # Switchboard uses 'label' as the key while mezza uses 'da'
+            # TODO: normalize the scheme
+            encoded_das = self.tokenizer.encode([f"<{da['label']}>" for da in mezza_das])
         else:
             encoded_das = mezza_das
         instances = []
