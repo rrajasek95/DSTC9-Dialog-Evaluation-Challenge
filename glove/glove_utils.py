@@ -92,7 +92,7 @@ def get_max_cosine_similarity_embs_models(message, knowledge_list, model, knowle
     if knowledge_policy == "infersent":
         embeddings = model.encode([message], tokenize=True)
     else:
-        embeddings = model.encode([message])
+        embeddings = model.encode([message], show_progress_bar=False)  # Get rid of annoying tqdm output
     message_embed = embeddings[0]
     max_sim = 0
     max_sim_fact = ""
