@@ -27,10 +27,9 @@ class AthenaUserQuestionsDataset(Dataset):
         """
 
         bos, eos, speaker1, speaker2 = self.tokenizer.convert_tokens_to_ids((self.special_tokens[:4]))
-        nofact = self.tokenizer.convert_tokens_to_ids("_nofact")
 
         # There is no fact
-        sequence = [[bos] + [nofact]] + history + [response + [eos]]
+        sequence = [[bos]] + history + [response + [eos]]
 
         sequence = [sequence[0]] + [[speaker2 if (len(sequence) - i) % 2 else speaker1] + s for i, s in
                                     enumerate(sequence[1:])]
