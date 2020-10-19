@@ -3,21 +3,21 @@ import json
 import logging
 import os
 import pickle
+from copy import deepcopy
 
+import pandas as pd
 import torch
 from nltk import word_tokenize
 from sklearn.metrics.pairwise import linear_kernel
-from tqdm import tqdm
-from glove.glove_utils import get_max_cosine_similarity, get_max_cosine_similarity_embs_models
-from knowledge_index import clean
-from sentence_transformers import SentenceTransformer
 from spacy.lang.en import English
+from tqdm import tqdm
+
+from knowledge_index import clean
 from pd_nrg.ranker import BertRankerRetriever, InfersentRankerRetriever, EmbRankerRetriever
-from copy import deepcopy
+
 CONFIG_NAME = 'config.json'
 
 logger = logging.getLogger(__file__)
-
 
 def transform_da(da_str):
     return " ".join([f"<{da}>" for da in da_str.split(" ")])
@@ -41,8 +41,7 @@ def segment_tgt(tgt):
     nlp.add_pipe(sentencizer)
     output = []
     for turn in tgt:
-        doc = nlp(turn)
-        output.append([each.text for each in doc.sents])
+        output.append([each.text for each in nlp(turn).sents])
     return output
 
 def load_data(dataset_path, split, training_configuration, generation_config):
@@ -97,7 +96,7 @@ def load_da_history_data(path_prefix, training_configuration):
     history_knowledge = itertools.repeat(itertools.repeat(""))
     # history_knowledge = [l.strip().split("_eos")[:-1] for l in open(path_prefix + ".src.fct")]
     # We load the DAs as an iterable to make it compatible with the baseline itertools repeat logic
-    resp_da = [transform_da(l.strip()).split() for l in open(history_resp_file).readlines()]
+    resp_da = [transform_da(l.strip().replace("_go ", "").replace(" _eos", "")).split(" ") for l in open(history_resp_file).readlines()]
 
     return history_da, history_knowledge, resp_da
 
@@ -135,16 +134,18 @@ def prepare_sentence_wise_data(fct, path_prefix, src, tgt, training_configuratio
 
     examples = []
 
-    for i in range(len(src)):
+    for i in range(len(segmented_conversation_contexts)):
         conversation_context = segmented_conversation_contexts[i]
-
         for j in range(len(segmented_responses[i])):
             # Previous turns + user's sentences
-            sentence_history = conversation_context + [segmented_responses[:j]]
+            sentence_history = conversation_context + segmented_responses[:j]
 
-            sentence_act_history = history_da[i] + resp_da[:j]
-            sentence_knowledge_history = history_knowledge[i] + [fct[i] for _ in range(i)]
-
+            if training_configuration != "baseline":
+                sentence_act_history = history_da[i] + resp_da[i][:j]
+                sentence_knowledge_history = [fct[i] if j != 0 else ""]
+            else:
+                sentence_act_history = None
+                sentence_knowledge_history = [fct[i] if j != 0 else ""]
             examples.append(
                 ((sentence_history, sentence_act_history, sentence_knowledge_history),
                  (segmented_responses[i][j], resp_da[i][j], fct[i])))
@@ -262,7 +263,7 @@ def process_split_turn(dataset_path, split, tokenizer, index, knowledge_policy, 
     path_prefix = os.path.join(dataset_path, split)
     reading_set_path = os.path.join(dataset_path, 'reading_sets', f'{split}.json')
     data = []
-    with open(path_prefix + '_full_anno.json', 'r') as annotated_split_file, \
+    with open(path_prefix + '.json', 'r') as annotated_split_file, \
             open(reading_set_path, 'r') as reading_set_file:
         annotated_data = json.load(annotated_split_file)
         reading_set = json.load(reading_set_file)
@@ -305,7 +306,7 @@ def process_split_sentence(dataset_path, split, tokenizer, index, ranker):
     # resp_da = itertools.repeat(itertools.repeat(None))
 
     eot_tag = tokenizer.encode("<eot>")
-    with open(path_prefix + '_full_anno.json', 'r') as annotated_split_file, \
+    with open(path_prefix + '.json', 'r') as annotated_split_file, \
             open(reading_set_path, 'r') as reading_set_file:
         annotated_data = json.load(annotated_split_file)
         reading_set = json.load(reading_set_file)
@@ -349,11 +350,14 @@ def prepare_turn_data(agent_mapping, available_knowledge, conv_id, dialog_act, k
     knowledge_sentence = ""
     for segment in turn["segments"]:
         sentence = segment["text"]
-        # With regards to knowledge selection, this is a highly approximate heuristic.
-        # Both Gopalakrishnan et al. 2019 and Hedayatnia et al. 2020
-        # acknowledge they don't have anything better for this issue
 
+        if knowledge_policy == "none":
+            # Always return an empty sentence
+            break
         if knowledge_policy == "tf_idf":
+            # With regards to knowledge selection, this is a highly approximate heuristic.
+            # Both Gopalakrishnan et al. 2019 and Hedayatnia et al. 2020
+            # acknowledge they don't have anything better for this issue
             text_tfidf = vec.transform([clean(sentence)])
             """
             In this section, we find the knowledge sentence that is closest
@@ -393,7 +397,7 @@ def prepare_turn_data(agent_mapping, available_knowledge, conv_id, dialog_act, k
 
 
 def get_ranker_retriever(knowledge_policy, vec):
-    if knowledge_policy == "bert" or knowledge_policy =="bert_sentence":
+    if knowledge_policy == "bert" or knowledge_policy == "bert_sentence":
         return BertRankerRetriever(vec)
     elif knowledge_policy == "infersent":
         return InfersentRankerRetriever(vec)
@@ -482,6 +486,56 @@ def augmented_tc_dataset(tokenizer, dataset_path, dataset_cache, knowledge_index
 
     return dataset
 
+def process_athena_questions_split(tokenizer, topic_question_data):
+
+    examples = []
+
+    def tokenize(obj):
+        if obj is None:
+            return None
+        if isinstance(obj, str):
+            return tokenizer.convert_tokens_to_ids(tokenizer.tokenize(obj))
+        if isinstance(obj, tuple):
+            return tuple(tokenize(o) for o in obj)
+        return list(tokenize(o) for o in obj)
+
+    for index, item in topic_question_data.iterrows():
+
+        context = item['text']
+        athena_response = item['response']
+        # All contexts are single turn
+
+        example = ([context], athena_response)
+        examples.append(tokenize(example))
+
+    return examples
+
+
+def load_athena_user_questions_data(tokenizer, dataset_path, dataset_cache, topic):
+    """
+    Process the Athena user questions data
+
+    :param tokenizer:
+    :param dataset_path:
+    :param dataset_cache:
+    :return:
+    """
+    if dataset_cache and os.path.isfile(dataset_cache):
+        logger.info("Load tokenized Athena dataset from cache at %s", dataset_cache)
+        dataset = torch.load(dataset_cache)
+    else:
+        logger.info("Cached data not found, creating the dataset object")
+
+
+        topic_file_path = os.path.join(dataset_path, f'{topic}.tsv')
+        topic_question_data = pd.read_csv(topic_file_path, sep='\t')
+        dataset = process_athena_questions_split(tokenizer, topic_question_data)
+
+        if dataset_cache:
+            logger.info("Saving tokenized dataset to cache %s", dataset_cache)
+            torch.save(dataset, dataset_cache)
+
+    return dataset
 
 class GlobalStepCounter(object):
     def __init__(self):
@@ -497,7 +551,7 @@ class GlobalStepCounter(object):
 def generate_references_for_split(dataset_path, dataset_cache, split, output_path):
     path_prefix = os.path.join(dataset_path, split)
     responses = []
-    with open(path_prefix + '_full_anno.json', 'r') as annotated_split_file:
+    with open(path_prefix + '.json', 'r') as annotated_split_file:
         annotated_data = json.load(annotated_split_file)
         for conv_id, conv_data in tqdm(annotated_data.items()):
             for turn in conv_data["content"]:

@@ -7,13 +7,13 @@ from pprint import pformat
 import torch
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
-from transformers import OpenAIGPTTokenizer, GPT2Tokenizer, OpenAIGPTDoubleHeadsModel
+from transformers import GPT2Tokenizer
 
-from gpt2 import GPT2DoubleHeadsModel
+from datasets.athena import AthenaUserQuestionsDataset
 from tc_dataset import TopicalChatsDataset, TopicalChatsKDDataset, TopicalChatsSWBDDataset, \
     TopicalChatsSentimentDataset, TopicalChatsSentGenerationDataset, TopicalChatsKDSentGenerationDataset
 from train_util.decode import top_filtering
-from utils import get_dataset, augmented_tc_dataset, get_dataset_sentence_generation
+from utils import get_dataset, augmented_tc_dataset, get_dataset_sentence_generation, load_athena_user_questions_data
 import torch.nn.functional as F
 import os
 
@@ -52,7 +52,6 @@ def decode_sequences(input_ids, token_type_ids, model, tokenizer, args):
         input_seq = tokenizer.decode(input_ids[i][0])
         prefix, suffix = input_seq.rsplit("<speaker", maxsplit=1)
         context = prefix + "<speaker" + suffix[:2]  # Hacky way to append the speaker tag
-
         current_output = []
 
         attempts = 0
@@ -171,7 +170,7 @@ def get_sentence_loader(args, tokenizer):
             del topical_chat[split]
 
     if args.training_configuration == "baseline":
-        dataset = TopicalChatsSentGenerationDataset(topical_chat[args.split], tokenizer, SPECIAL_TOKENS, args)
+        dataset = TopicalChatsSentGenerationDataset(topical_chat, tokenizer, SPECIAL_TOKENS, args)
     else:
         dataset = TopicalChatsKDSentGenerationDataset(topical_chat[args.split], tokenizer, SPECIAL_TOKENS, args)
     sampler = torch.utils.data.distributed.DistributedSampler(dataset) if args.distributed else None
@@ -181,12 +180,40 @@ def get_sentence_loader(args, tokenizer):
 
     return loader, sampler, dataset
 
+
 def get_loader(args, tokenizer):
+    if args.dataset_configuration == "athena-questions":
+        dataset = get_athena_questions_dataset(args, tokenizer)
+    else:
+        dataset = get_topical_chats_dataset(args, tokenizer)
+
+    sampler = torch.utils.data.distributed.DistributedSampler(dataset) if args.distributed else None
+    loader = DataLoader(dataset, sampler=sampler, batch_size=args.valid_batch_size,
+                              collate_fn=lambda x: collate_batch_elements(x, tokenizer, args),
+                              shuffle=False)
+
+    return loader, sampler, dataset
+
+
+def get_athena_questions_dataset(args, tokenizer):
+    # We are overloading the split flag to handle athena question topics
+    # Arguably this is preferable since it's possible to use a bash script to loop over the data
+    # And produce separate outputs for each topic.
+    # There is is a minor overhead, however, for starting the script each time.
+    athena_questions_topic = load_athena_user_questions_data(tokenizer, args.dataset_path, args.dataset_cache, args.split)
+    athena_dataset = AthenaUserQuestionsDataset(athena_questions_topic, tokenizer, SPECIAL_TOKENS, args)
+
+    return athena_dataset
+
+
+def get_topical_chats_dataset(args, tokenizer):
     if args.dataset_configuration == "dstc9":
-        topical_chat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache, args.training_configuration, args.generation_configuration)
+        topical_chat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache, args.training_configuration,
+                                   args.generation_configuration)
     else:
         topical_chat = augmented_tc_dataset(tokenizer, args.dataset_path, args.dataset_cache,
-                                            args.knowledge_index_path, args.training_configuration, args.knowledge_policy)
+                                            args.knowledge_index_path, args.training_configuration,
+                                            args.knowledge_policy)
     splits = list(topical_chat.keys())
     for split in splits:
         if split != args.split:
@@ -202,13 +229,7 @@ def get_loader(args, tokenizer):
     else:
         dataset = TopicalChatsKDDataset(topical_chat[args.split], tokenizer, SPECIAL_TOKENS, args,
                                         inference=args.heuristic_policy)  # Enable heuristic dialog policy
-
-    sampler = torch.utils.data.distributed.DistributedSampler(dataset) if args.distributed else None
-    loader = DataLoader(dataset, sampler=sampler, batch_size=args.valid_batch_size,
-                              collate_fn=lambda x: collate_batch_elements(x, tokenizer, args),
-                              shuffle=False)
-
-    return loader, sampler, dataset
+    return dataset
 
 
 def generate_sentence_wise_output(model, tokenizer, dataset, example, args):
@@ -252,7 +273,9 @@ def generate_sentence_wise_output(model, tokenizer, dataset, example, args):
             output_so_far.append(prev.item())
         if len(output_so_far) >= args.max_length:
             break
-        output_so_far.append(special_tokens_ids[2])
+        # output_so_far.append(special_tokens_ids[1])
+        output_so_far.append(special_tokens_ids[4])
+
 
     return tokenizer.decode(output_so_far, skip_special_tokens=True)
 
@@ -263,7 +286,9 @@ def generate_submissions_sent(args):
 
     tokenizer = tokenizer_class.from_pretrained(args.model_metadata_path)
 
+    # data = torch.load(args.model_checkpoint + '/pytorch_model.bin', map_location=torch.device('cpu'))
     data = torch.load(args.model_checkpoint + '/pytorch_model.bin')
+
     model = data["mymodel"]
     model.to(args.device)
 
@@ -277,7 +302,7 @@ def generate_submissions_sent(args):
             output = generate_sentence_wise_output(model, tokenizer, dataset, example, args)
             if i % args.log_every_n == 0:
                 logger.info(output)
-            outputs.append(output + "\n")
+            outputs.append(output.replace('\n', '') + '\n')
 
     save_outputs_and_plan([], args, outputs)
 
@@ -354,37 +379,40 @@ def save_outputs_and_plan(all_das, args, outputs):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
+    parser.add_argument('--gpt2_variant', type=str, default="vanilla",
+                        help="Variant of the GPT2 architecture to train",
+                        choices=['vanilla', 'adapter'])
     parser.add_argument("--dataset_path", type=str, default="processed_output",
                         help="Path or url of the dataset. If empty download from S3.")
-    parser.add_argument('--training_configuration', type=str, default="sentiment",
+    parser.add_argument('--training_configuration', type=str, default="baseline",
                         help="Training configuration to run",
                         choices=["baseline", "kd-pd-nrg", "kd-pd-nrg-swbd", "sentiment"])
-    parser.add_argument('--dataset_configuration', type=str, default="topical-chats",
+    parser.add_argument('--dataset_configuration', type=str, default="dstc9",
                         help="Configuration of dataset to load for training",
-                        choices=["dstc9", "topical-chats"])
-    parser.add_argument('--generation_configuration', type=str, default='turn',
+                        choices=["dstc9", "topical-chats", 'athena-questions'])
+    parser.add_argument('--generation_configuration', type=str, default='sentence',
                         choices=['turn', 'sentence'])
     parser.add_argument('--heuristic_policy', action='store_true',
                         help="Enable heuristic dialog policy for generation (as opposed to using ground truth)")
-    parser.add_argument('--knowledge_index_path', type=str, default="./tc_processed/knowledge_index.pkl",
+    parser.add_argument('--knowledge_index_path', type=str, default="./tc_processed/tc_knowledge_index_bert_all.pkl",
                         help="Path to knowledge index file")
-    parser.add_argument('--model_checkpoint', type=str, default="runs/topical_chats_gpt2/",
+    parser.add_argument('--model_checkpoint', type=str, default="runs/bert_sentence_generation/",
                         help="Path, url or short name of the model")
     parser.add_argument("--split", type=str,
-                        choices=['valid_freq', 'test_freq', 'valid_rare', 'test_rare'],
                         default='valid_freq',
-                        help='Split of topical chats to generate outputs for')
-    parser.add_argument('--model_metadata_path', type=str, default='runs/topical_chats_gpt2',
+                        help='Split file of the dataset (athena/topical chats) to generate outputs for')
+    parser.add_argument('--model_metadata_path', type=str, default='./runs/bert_sentence_generation',
                         help='Path to the tokenizer and model configuration')
     parser.add_argument("--num_candidates", type=int, default=2, help="Number of candidates for training")
     parser.add_argument('--dataset_cache', type=str, default='./dataset_caches', help='Path or url of the dataset cache')
     parser.add_argument('--max_history', type=int, default=2, help='Number of previous exchanges to keep in history')
     parser.add_argument('--max_fact_length', type=int, default=200,
                         help='Number of fact tokens to include in the input')
-    parser.add_argument('--valid_batch_size', type=int, default=4,
+    parser.add_argument('--valid_batch_size', type=int, default=1,
                         help='Batch size for generating outputs')
-    parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu",
-                        help="Device (cuda or cpu)")
+    # parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu",
+    #                     help="Device (cuda or cpu)")
+    parser.add_argument("--device", type=str, default="cpu")
     parser.add_argument("--local_rank", type=int, default=-1,
                         help="Local rank for distributed training (-1: not distributed)")
     parser.add_argument('--output_file_path', type=str, default='submissions/submissions.txt')

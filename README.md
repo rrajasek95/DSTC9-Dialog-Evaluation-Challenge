@@ -32,3 +32,9 @@ tokenization is done in `utils.py` while the data preparation to feed into the m
 ### Contact
 
 If you experience any issues with this code, please contact me at mehrishikib@gmail.com
+
+
+### Setup
+- `spacy`
+- `python -m spacy download en_core_web_lg`
+- `nltk.download('punkt')`

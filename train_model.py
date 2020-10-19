@@ -30,8 +30,6 @@ from tqdm.auto import tqdm
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-from transformers import AdamW, GPT2Tokenizer
-from gpt2 import GPT2DoubleHeadsModel
 
 from tc_dataset import TopicalChatsDataset, TopicalChatsKDDataset, TopicalChatsSentimentDataset, \
     TopicalChatsDatasetSent, TopicalChatsKDSentDataset
@@ -120,7 +118,7 @@ TRAINING_CONFIG_LABEL_SCHEME = {
     "baseline": "switchboard_da",
     "sentiment": "sentiment",
     "kd-pd-nrg": "mezza_da",
-    "kd-pd-nrg-swbd": "switchboard_da"
+    "kd-pd-nrg-swbd": "swbd_da_v3"  # The key for the newer labels were updated to avoid overwriting original labels
 }
 
 ATTR_TO_SPECIAL_TOKEN = {
@@ -409,7 +407,10 @@ def save_model_config(model, tokenizer, args):
 
 def train():
     parser = argparse.ArgumentParser()
-
+    parser.add_argument('--gpt2_variant', type=str, default="vanilla",
+                        help="Variant of GPT2 to train",
+                        choices=['vanilla', 'adapter']
+                        )
     parser.add_argument("--dataset_path", type=str, default="processed_output",
                         help="Path or url of the dataset. If empty download from S3.")
     parser.add_argument('--training_configuration', type=str, default="baseline",
@@ -472,7 +473,9 @@ def train():
                         help="Nucleus filtering (top-p) before sampling (<=0.0: no filtering)")
     parser.add_argument("--no_sample", action='store_true', help="Set to use greedy decoding instead of sampling")
     parser.add_argument("--max_length", type=int, default=20, help="Maximum length of the output utterances")
-    parser.add_argument("--knowledge_policy", type=str, default="bert_sentence", choices=["tf_idf", "embeddings", "infersent", "bert", "bert_sentence"])
+    parser.add_argument("--knowledge_policy", type=str, default="bert_sentence", choices=[
+        "none",  # Null policy that always returns an empty knowledge sentence
+        "tf_idf", "embeddings", "infersent", "bert", "bert_sentence"])
     args = parser.parse_args()
 
     # logging is set to INFO (resp. WARN) for main (resp. auxiliary) process. logger.info => log main process only, logger.warning => log all processes
@@ -482,6 +485,8 @@ def train():
     logger.info("Arguments: %s", pformat(args))
 
     logger.info("Prepare tokenizer, pretrained model and optimizer.")
+
+    from transformers import AdamW, GPT2Tokenizer
     tokenizer_class = GPT2Tokenizer
     tokenizer = tokenizer_class.from_pretrained(args.model_checkpoint)
 
@@ -505,7 +510,11 @@ def train():
         # so we use the original variant of the class for training
         import transformers.modeling_gpt2 as mgpt2
         model_class = mgpt2.GPT2DoubleHeadsModel
+    elif args.gpt2_variant == 'adapter':
+        import modeling_gpt2_adapter as adapter
+        model_class = adapter.GPT2DoubleHeadsModel
     else:
+        from gpt2 import GPT2DoubleHeadsModel
         # Load the model after the tokenizer. We hit an OOM error if we try to pre-load the model
         model_class = GPT2DoubleHeadsModel
 
