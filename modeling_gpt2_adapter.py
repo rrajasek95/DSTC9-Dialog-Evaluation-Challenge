@@ -36,6 +36,7 @@ from transformers.modeling_utils import (
     prune_conv1d_layer,
 )
 
+from configuration_gpt2_adapter import GPT2AdapterConfig
 
 logger = logging.getLogger(__name__)
 
@@ -233,25 +234,32 @@ class Block(nn.Module):
         self.attn = Attention(nx, n_ctx, config, scale)
         self.ln_2 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
         self.mlp = MLP(4 * nx, config)
-        self.ln_3 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
 
-        # TODO: Add configurable bottleneck sizes
-        bottleneck_size = 200
-        self.mlp_2 = MLP(bottleneck_size, config)
+        # layers for adapter
+        self.ln_3 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
+        self.mlp_2 = MLP(config.bottleneck_size, config)
+
+        # Architecture search #1: Layer norm after adapter
+        self.ln_4_active = config.layer_norm_after_adapter
+        if self.ln_4_active:
+            self.ln_4 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
 
         self._freeze_weights()
 
     def _freeze_weights(self):
-        # TODO: unfreeze attention masked bias since it's initialized
-        #       afresh for fine-tuning
         print("Freezing weights")
+
+        tunable_layers = [self.ln_1, self.ln_2, self.ln_3, self.mlp_2]
+        if self.ln_4_active:
+            tunable_layers.append(self.ln_4)
+
         for parameter in self.parameters():
             """
             Houlsby et al. 2019 recommends that layer norm weights be fine-tuned along with the adapter
             weights. This ensures that the model is able to adapt to the underlying input.
             """
-            if parameter not in [self.ln_1, self.ln_2, self.ln_3, self.mlp_2]:
-                parameter.requires_grad_(False)
+            if parameter not in tunable_layers:
+                parameter.requires_grad = False
 
     def forward(
         self, x, layer_past=None, attention_mask=None, head_mask=None, use_cache=True, output_attentions=False,
@@ -266,7 +274,6 @@ class Block(nn.Module):
         )
         a = output_attn[0]  # output_attn: a, present, (attentions)
 
-        # TODO: Experiment with adding an adapter before the Multi-Head Attention layer
         x = x + a
         m = self.mlp(self.ln_2(x))
         x = x + m
@@ -275,7 +282,10 @@ class Block(nn.Module):
         a = self.mlp_2(self.ln_3(x))
 
         # TODO: test if adding a Layer norm after adapter layer improves performance
-        x = x + a
+        if self.ln_4_active:
+            x = self.ln_4(x + a)
+        else:
+            x = x + a
 
         outputs = [x] + output_attn[1:]
         return tuple(outputs)  # x, present, (attentions)
@@ -286,7 +296,7 @@ class GPT2PreTrainedModel(PreTrainedModel):
         a simple interface for downloading and loading pretrained models.
     """
 
-    config_class = GPT2Config
+    config_class = GPT2AdapterConfig
     load_tf_weights = load_tf_weights_in_gpt2
     base_model_prefix = "transformer"
 

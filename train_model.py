@@ -476,6 +476,18 @@ def train():
     parser.add_argument("--knowledge_policy", type=str, default="bert_sentence", choices=[
         "none",  # Null policy that always returns an empty knowledge sentence
         "tf_idf", "embeddings", "infersent", "bert", "bert_sentence"])
+
+    adapter_parser = parser.add_argument_group('adapter', 'Arguments for the residual adapter configuration')
+
+    adapter_parser.add_argument('--bottleneck_size', default=200,
+                                type=int,
+                                help='The size of the feed-forward layer for the adapter model')
+    adapter_parser.add_argument('--layer_norm_after_adapter', action='store_true',
+                                help='Flag for whether layer norm is added after the adapter layer'
+    )
+    adapter_parser.add_argument('--freeze_embeddings', action='store_true',
+                                help='Flag for whether input embeddings should be frozen for adapter')
+
     args = parser.parse_args()
 
     # logging is set to INFO (resp. WARN) for main (resp. auxiliary) process. logger.info => log main process only, logger.warning => log all processes
@@ -523,7 +535,12 @@ def train():
         data = torch.load(args.model_checkpoint + '/pytorch_model.bin')
         model = data["mymodel"]
     else:
-        model = model_class.from_pretrained(args.model_checkpoint)
+        if args.gpt2_variant == "adapter":
+            model = model_class.from_pretrained(args.model_checkpoint,
+                                                bottleneck_size=args.bottleneck_size,
+                                                layer_norm_after_adapter=args.layer_norm_after_adapter)
+        else:
+            model = model_class.from_pretrained(args.model_checkpoint)
 
     # Add special tokens if they are not already added
     if num_added_tokens > 0:
