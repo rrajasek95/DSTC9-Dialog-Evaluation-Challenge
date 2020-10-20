@@ -137,6 +137,7 @@ class GPT2AdapterConfig(PretrainedConfig):
         eos_token_id=50256,
         bottleneck_size=200,
         layer_norm_after_adapter=False,
+        adapter_after_attn=False,
         **kwargs
     ):
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
@@ -164,6 +165,7 @@ class GPT2AdapterConfig(PretrainedConfig):
 
         self.bottleneck_size=bottleneck_size
         self.layer_norm_after_adapter=layer_norm_after_adapter
+        self.adapter_after_attn = adapter_after_attn
 
     @property
     def max_position_embeddings(self):

@@ -235,6 +235,13 @@ class Block(nn.Module):
         self.ln_2 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
         self.mlp = MLP(4 * nx, config)
 
+        # Adapter after multi-head attention
+        self.adapter_after_attn = config.adapter_after_attn
+
+        if self.adapter_after_attn:
+            self.ln_post_attn = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
+            self.mlp_post_attn = MLP(config.bottleneck_size, config)
+
         # layers for adapter
         self.ln_3 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
         self.mlp_2 = MLP(config.bottleneck_size, config)
@@ -250,6 +257,9 @@ class Block(nn.Module):
         print("Freezing weights")
 
         tunable_layers = [self.ln_1, self.ln_2, self.ln_3, self.mlp_2]
+        if self.adapter_after_attn:
+            tunable_layers.append(self.ln_post_attn, self.mlp_post_attn)
+
         if self.ln_4_active:
             tunable_layers.append(self.ln_4)
 
@@ -275,6 +285,11 @@ class Block(nn.Module):
         a = output_attn[0]  # output_attn: a, present, (attentions)
 
         x = x + a
+
+        if self.adapter_after_attn:
+            post_attn_m = self.mlp_post_attn(self.ln_post_attn(x))
+            x = x + post_attn_m
+
         m = self.mlp(self.ln_2(x))
         x = x + m
 
