@@ -219,8 +219,9 @@ def get_topical_chats_dataset(args, tokenizer):
         topical_chat = get_dataset(tokenizer, args.dataset_path, args.dataset_cache, args.training_configuration,
                                    args.generation_configuration)
     else:
+        label_scheme = TRAINING_CONFIG_LABEL_SCHEME.get(args.training_configuration)
         topical_chat = augmented_tc_dataset(tokenizer, args.dataset_path, args.dataset_cache,
-                                            args.knowledge_index_path, args.training_configuration,
+                                            args.knowledge_index_path, label_scheme,
                                             args.knowledge_policy)
     splits = list(topical_chat.keys())
     for split in splits:
