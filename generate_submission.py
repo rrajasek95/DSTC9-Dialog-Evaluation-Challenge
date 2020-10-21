@@ -40,6 +40,13 @@ ATTR_TO_SPECIAL_TOKEN = {
     'additional_special_tokens': ["<speaker1>", "<speaker2>"]
 }
 
+TRAINING_CONFIG_LABEL_SCHEME = {
+    "baseline": "switchboard_da",
+    "sentiment": "sentiment",
+    "kd-pd-nrg": "mezza_da",
+    "kd-pd-nrg-swbd": "swbd_da_v3"  # The key for the newer labels were updated to avoid overwriting original labels
+}
+
 MODEL_INPUTS = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "token_type_ids", "das_to_return"]
 PADDED_INPUTS = ["input_ids", "lm_labels", "token_type_ids"]
 OUTPUT_PATIENCE = 5
@@ -159,10 +166,11 @@ def collate_batch_elements(batch, tokenizer, args):
 
 def get_sentence_loader(args, tokenizer):
     if args.dataset_configuration == "dstc9":
-        topical_chat = get_dataset_sentence_generation(tokenizer, args.dataset_path, args.dataset_cache, args.training_configuration)
+        topical_chat = get_dataset_sentence_generation(tokenizer, args.dataset_path, args.dataset_cache, label_scheme)
     else:
+        label_scheme = TRAINING_CONFIG_LABEL_SCHEME.get(args.training_configuration)
         topical_chat = augmented_tc_dataset(tokenizer, args.dataset_path, args.dataset_cache,
-                                            args.knowledge_index_path, args.training_configuration, args.knowledge_policy)
+                                            args.knowledge_index_path, label_scheme, args.knowledge_policy)
 
     splits = list(topical_chat.keys())
     for split in splits:
