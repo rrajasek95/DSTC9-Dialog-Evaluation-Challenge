@@ -258,7 +258,8 @@ class Block(nn.Module):
 
         tunable_layers = [self.ln_1, self.ln_2, self.ln_3, self.mlp_2]
         if self.adapter_after_attn:
-            tunable_layers.append(self.ln_post_attn, self.mlp_post_attn)
+            tunable_layers.append(self.ln_post_attn)
+            tunable_layers.append(self.mlp_post_attn)
 
         if self.ln_4_active:
             tunable_layers.append(self.ln_4)
