@@ -166,7 +166,7 @@ def collate_batch_elements(batch, tokenizer, args):
 
 def get_sentence_loader(args, tokenizer):
     if args.dataset_configuration == "dstc9":
-        topical_chat = get_dataset_sentence_generation(tokenizer, args.dataset_path, args.dataset_cache, label_scheme)
+        topical_chat = get_dataset_sentence_generation(tokenizer, args.dataset_path, args.dataset_cache, args.training_configuration)
     else:
         label_scheme = TRAINING_CONFIG_LABEL_SCHEME.get(args.training_configuration)
         topical_chat = augmented_tc_dataset(tokenizer, args.dataset_path, args.dataset_cache,
