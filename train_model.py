@@ -487,7 +487,8 @@ def train():
     )
     adapter_parser.add_argument('--freeze_embeddings', action='store_true',
                                 help='Flag for whether input embeddings should be frozen for adapter')
-
+    adapter_parser.add_argument('--adapter_after_attn', action='store_true',
+                                help='Flag for whether we add an adapter module after the attention heads')
     args = parser.parse_args()
 
     # logging is set to INFO (resp. WARN) for main (resp. auxiliary) process. logger.info => log main process only, logger.warning => log all processes
@@ -538,7 +539,8 @@ def train():
         if args.gpt2_variant == "adapter":
             model = model_class.from_pretrained(args.model_checkpoint,
                                                 bottleneck_size=args.bottleneck_size,
-                                                layer_norm_after_adapter=args.layer_norm_after_adapter)
+                                                layer_norm_after_adapter=args.layer_norm_after_adapter,
+                                                adapter_after_attn=args.adapter_after_attn)
         else:
             model = model_class.from_pretrained(args.model_checkpoint)
 
