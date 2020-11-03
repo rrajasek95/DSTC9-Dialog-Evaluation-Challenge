@@ -12,11 +12,7 @@ class AthenaUserQuestionsDataset(Dataset):
 
     def __getitem__(self, index):
         history, response = self.data[index]
-
-        if self.inference:
-            instance = self.build_input_from_segments(history, [])
-        else:
-            instance = self.build_input_from_segments(history, response)
+        instance = self.build_input_from_segments(history, response)
 
         return [instance]
 
@@ -44,6 +40,33 @@ class AthenaUserQuestionsDataset(Dataset):
             instance["lm_labels"] = ([-100] * sum(len(s) for s in sequence[:-1])) + [-100] + sequence[-1][1:]
 
         return instance
+
+    # def build_input_from_segments_dialogpt(self, history, response):
+    #     """
+    #     Build inputs in the format that was used for the vanilla DialoGPT model:
+    #     Turn1 <|endoftext|> Turn2 <|endoftext|> ...
+    #
+    #     We don't do any additional data preparation since we will be using this for inference, not training
+    #
+    #     :param history:
+    #     :param response:
+    #     :return:
+    #     """
+    #     eos = self.tokenizer.eos_token
+    #
+    #     sequence = []
+    #     turns = history + [response]
+    #     for i, turn in enumerate(turns):
+    #         if i == len(turn) - 1:
+    #             sequence.append(turn)
+    #         else:
+    #             sequence.append(turn + [eos])
+    #
+    #     instance = {}
+    #     instance["input_ids"] = list(chain.from_iterable(sequence))
+    #     instance["token_type_ids"] = [None for _ in sequence]
+    #
+    #     return instance
 
     def __len__(self):
         return len(self.data)
