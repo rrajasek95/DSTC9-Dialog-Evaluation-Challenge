@@ -411,9 +411,9 @@ def train():
                         help="Variant of GPT2 to train",
                         choices=['vanilla', 'adapter']
                         )
-    parser.add_argument("--dataset_path", type=str, default="processed_output",
+    parser.add_argument("--dataset_path", type=str, default="swbd_v2_data",
                         help="Path or url of the dataset. If empty download from S3.")
-    parser.add_argument('--training_configuration', type=str, default="baseline",
+    parser.add_argument('--training_configuration', type=str, default="kd-pd-nrg-swbd",
                         help="Training configuration to run",
                         choices=["baseline", "kd-pd-nrg", "kd-pd-nrg-swbd", "sentiment"])
     parser.add_argument('--dataset_configuration', type=str, default="topical-chats",

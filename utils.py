@@ -339,7 +339,7 @@ def process_split_sentence(dataset_path, split, tokenizer, index, ranker):
 def prepare_sentence_knowledge_data(agent_mapping, conv_id, dialog_act, tokenizer, turn, sentence, ranker, da_index):
     knowledge_sentence = ranker.get_top_fact(clean(sentence), conv_id, threshold=True)
     original_knowledge_sentence = agent_mapping[turn["agent"]].get(knowledge_sentence, "")
-    return tokenizer.encode(sentence), None, tokenizer.encode(original_knowledge_sentence)
+    return tokenizer.encode(sentence), [turn[dialog_act][da_index]], tokenizer.encode(original_knowledge_sentence)
 
 
 
