@@ -35,6 +35,13 @@ def segment_src(src):
         segmented_conversations.append(segmented_conversation)
     return segmented_conversations
 
+def segment_fact(fct):
+    segmented_conversations = []
+    for conversation in fct:
+        doc = conversation[:-1].split(";")
+        segmented_conversations.append([segment for segment in doc])
+    return segmented_conversations
+
 def segment_tgt(tgt):
     nlp = English()
     sentencizer = nlp.create_pipe("sentencizer")
@@ -61,14 +68,17 @@ def load_data(dataset_path, split, training_configuration, generation_config):
 
 def load_data_for_sentence_generation(dataset_path, split, training_configuration):
     path_prefix = os.path.join(dataset_path, split)
+    fct = [l.strip() for l in open("valid_freq_facts_bert.txt").readlines()]
 
     # Splitting history into multiple sentences for ease of further processing
     src = [l.strip().split("_eos")[:-1] for l in open(path_prefix + '.src').readlines()]
     tgt = [l.strip().replace("_go", "").replace("_eos", "") for l in open(path_prefix + '.tgt').readlines()]
-    fct = [l.strip() for l in open(path_prefix + '.fct').readlines()]
+    # fct = [l.strip() for l in open(path_prefix + '.fct').readlines()]
+    # fct = [l.strip() for l in open("valid_freq_facts_bert.txt").readlines()]
+    segmented_responses = segment_tgt(tgt)
+    segmented_facts = segment_fact(fct)
 
     segmented_conversation_contexts = segment_src(src)
-    segmented_responses = segment_tgt(tgt)
 
     if training_configuration != "baseline":
         history_da, history_knowledge, resp_da = load_da_history_data(path_prefix, training_configuration)
@@ -82,7 +92,7 @@ def load_data_for_sentence_generation(dataset_path, split, training_configuratio
 
     context = [zip(s, h, k) for (s, h, k) in zip(segmented_sent, history_da, history_knowledge)]
 
-    return list(zip(context, zip(segmented_tgt, resp_da, fct)))
+    return list(zip(context, zip(segmented_tgt, resp_da, segmented_facts)))
 
 def load_da_history_data(path_prefix, training_configuration):
 
@@ -208,8 +218,10 @@ def get_dataset_sentence_generation(tokenizer, dataset_path, dataset_cache, trai
     else:
         logger.info("Loading dataset from %s", dataset_path)
 
-        splits = ['train', 'valid_freq', 'test_freq', 'test_rare', 'valid_rare']
+        # splits = ['train', 'valid_freq', 'test_freq', 'test_rare', 'valid_rare']
         dataset = dict()
+        splits = ['valid_freq']
+
 
         for split in splits:
             data_items = load_data_for_sentence_generation(dataset_path, split, training_configuration)
