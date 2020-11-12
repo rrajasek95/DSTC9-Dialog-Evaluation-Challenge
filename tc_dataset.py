@@ -618,7 +618,12 @@ class TopicalChatsKDSentGenerationDataset(TopicalChatsKDDataset):
                 uses_fact.append("_fact")
 
         # fact = self.tokenizer.decode(fact)
-        plan = [(das[i] + fact[i] + uses_fact[i]) for i in range(len(das))]
+        plan = []
+        for i in range(len(das)):
+            if i >= len(fact):
+                plan.append(das[i] + "no_fact" + "_nofact")
+            else:
+                plan.append(das[i] + fact[i] + uses_fact[i])
 
         # plan = [(da + fact + uses_fact) for da in das]
         return [{"history": history, "plan": plan}]
