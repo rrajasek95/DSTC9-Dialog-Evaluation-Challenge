@@ -309,7 +309,6 @@ def generate_submissions_sent(args):
         cache_file = torch.load(args.submission_cache_path)
         outputs = cache_file["outputs"]
         completed_index = cache_file["i"]
-        save_outputs_and_plan([], args, outputs)
 
     loader, sampler, dataset = get_sentence_loader(args, tokenizer)
     with torch.no_grad():
@@ -327,6 +326,7 @@ def generate_submissions_sent(args):
                 cache_file["outputs"] = outputs
                 cache_file["i"] = i
                 torch.save(cache_file, args.submission_cache_path)
+                save_outputs_and_plan([], args, outputs)
 
     save_outputs_and_plan([], args, outputs)
 
