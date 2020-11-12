@@ -68,7 +68,7 @@ def load_data(dataset_path, split, training_configuration, generation_config):
 
 def load_data_for_sentence_generation(dataset_path, split, training_configuration):
     path_prefix = os.path.join(dataset_path, split)
-    fct = [l.strip() for l in open("valid_freq_facts_bert.txt").readlines()]
+    fct = [l.strip() for l in open("valid_freq_facts_bert_2.txt").readlines()]
 
     # Splitting history into multiple sentences for ease of further processing
     src = [l.strip().split("_eos")[:-1] for l in open(path_prefix + '.src').readlines()]
