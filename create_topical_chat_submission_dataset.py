@@ -144,7 +144,7 @@ def create_knowledge_file(turn_count, keys, cur_convo_id, split_data, reading_se
             turn_knowledge.append(segment_knowledge)
         total_knowledge.append(turn_knowledge)
         turn_count += 1
-    with open('valid_freq_facts_bert_2.txt', 'w') as f:
+    with open('valid_freq_facts_bert_3.txt', 'w') as f:
         for item in total_knowledge:
             fact_string = ""
             for s in item:

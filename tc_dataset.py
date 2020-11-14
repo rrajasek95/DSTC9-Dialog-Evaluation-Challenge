@@ -579,6 +579,7 @@ class TopicalChatsKDSentGenerationDataset(TopicalChatsKDDataset):
     def __init__(self, dataset, tokenizer, special_tokens, args, inference=False):
         super().__init__(dataset, tokenizer, special_tokens, args, inference)
         self.nlp = spacy.load('en')
+        self.knowledge_policy = args.knowledge_policy
 
     def __getitem__(self, index):
         """
@@ -609,23 +610,25 @@ class TopicalChatsKDSentGenerationDataset(TopicalChatsKDDataset):
         (history, (response, das, fact)) = self.dataset[index]
         history = [h[0] for h in history]
         history, fact = self.truncate_sequences(history, fact)
-
-        uses_fact = []
-        for f in fact:
-            if f == "no_fact":
-                uses_fact.append("_nofact")
-            else:
-                uses_fact.append("_fact")
-
-        # fact = self.tokenizer.decode(fact)
         plan = []
-        for i in range(len(das)):
-            if i >= len(fact):
-                plan.append(das[i] + "no_fact" + "_nofact")
-            else:
-                plan.append(das[i] + fact[i] + uses_fact[i])
 
-        # plan = [(da + fact + uses_fact) for da in das]
+        if self.knowledge_policy == "bert_sentence":
+            uses_fact = []
+            for f in fact:
+                if f == "no_fact":
+                    uses_fact.append("_nofact")
+                else:
+                    uses_fact.append("_fact")
+            for i in range(len(das)):
+                if i >= len(fact):
+                    plan.append(das[i] + "no_fact" + "_nofact")
+                else:
+                    plan.append(das[i] + fact[i] + uses_fact[i])
+        else:
+            uses_fact = "_nofact" if len(fact) <= 1 else "_fact"
+            fact = self.tokenizer.decode(fact)
+            plan = [(da + fact + uses_fact) for da in das]
+
         return [{"history": history, "plan": plan}]
 
     def truncate_sequences(self, history, fact):
@@ -634,14 +637,17 @@ class TopicalChatsKDSentGenerationDataset(TopicalChatsKDDataset):
             history = history[-(2 * self.max_history + 1):]
 
         # Truncate facts to decrease overall input length
-        trunc_facts = []
-        for f in fact:
-            if f.strip() == "no_fact":
-                trunc_facts.append(f.strip())
-            else:
-                f = self.tokenizer.encode(f.strip())
-                f = f[:min(len(f), self.max_fact_length)]
-                trunc_facts.append(self.tokenizer.decode(f))
+        if self.knowledge_policy != "bert_sentence":
+            trunc_facts = fact[:min(len(fact), self.max_fact_length)]
+        else:
+            trunc_facts = []
+            for f in fact:
+                if f.strip() == "no_fact":
+                    trunc_facts.append(f.strip())
+                else:
+                    f = self.tokenizer.encode(f.strip())
+                    f = f[:min(len(f), self.max_fact_length)]
+                    trunc_facts.append(self.tokenizer.decode(f))
 
         return history, trunc_facts
 

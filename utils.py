@@ -66,19 +66,18 @@ def load_data(dataset_path, split, training_configuration, generation_config):
         return prepare_sentence_wise_data(fct, path_prefix, src, tgt, training_configuration)
 
 
-def load_data_for_sentence_generation(dataset_path, split, training_configuration):
+def load_data_for_sentence_generation(dataset_path, split, training_configuration, knowledge_policy="baseline"):
     path_prefix = os.path.join(dataset_path, split)
-    fct = [l.strip() for l in open("valid_freq_facts_bert_2.txt").readlines()]
 
     # Splitting history into multiple sentences for ease of further processing
     src = [l.strip().split("_eos")[:-1] for l in open(path_prefix + '.src').readlines()]
     tgt = [l.strip().replace("_go", "").replace("_eos", "") for l in open(path_prefix + '.tgt').readlines()]
-    # fct = [l.strip() for l in open(path_prefix + '.fct').readlines()]
-    # fct = [l.strip() for l in open("valid_freq_facts_bert.txt").readlines()]
+    fct = [l.strip() for l in open(path_prefix + '.fct').readlines()]
     segmented_responses = segment_tgt(tgt)
-    segmented_facts = segment_fact(fct)
-
     segmented_conversation_contexts = segment_src(src)
+
+    if knowledge_policy == "bert_sentence":
+        fct = segment_fact(fct)
 
     if training_configuration != "baseline":
         history_da, history_knowledge, resp_da = load_da_history_data(path_prefix, training_configuration)
@@ -92,7 +91,7 @@ def load_data_for_sentence_generation(dataset_path, split, training_configuratio
 
     context = [zip(s, h, k) for (s, h, k) in zip(segmented_sent, history_da, history_knowledge)]
 
-    return list(zip(context, zip(segmented_tgt, resp_da, segmented_facts)))
+    return list(zip(context, zip(segmented_tgt, resp_da, fct)))
 
 def load_da_history_data(path_prefix, training_configuration):
 
@@ -210,7 +209,7 @@ def get_dataset(tokenizer, dataset_path, dataset_cache, training_configuration, 
         torch.save(dataset, dataset_cache)
     return dataset
 
-def get_dataset_sentence_generation(tokenizer, dataset_path, dataset_cache, training_configuration):
+def get_dataset_sentence_generation(tokenizer, dataset_path, dataset_cache, training_configuration, knowledge_policy="baseline"):
     dataset_cache = dataset_cache + '_' + type(tokenizer).__name__
     if dataset_cache and os.path.isfile(dataset_cache):
         logger.info("Load tokenized dataset from cache at %s", dataset_cache)
@@ -218,13 +217,11 @@ def get_dataset_sentence_generation(tokenizer, dataset_path, dataset_cache, trai
     else:
         logger.info("Loading dataset from %s", dataset_path)
 
-        # splits = ['train', 'valid_freq', 'test_freq', 'test_rare', 'valid_rare']
+        splits = ['train', 'valid_freq', 'test_freq', 'test_rare', 'valid_rare']
         dataset = dict()
-        splits = ['valid_freq']
-
 
         for split in splits:
-            data_items = load_data_for_sentence_generation(dataset_path, split, training_configuration)
+            data_items = load_data_for_sentence_generation(dataset_path, split, training_configuration, knowledge_policy)
 
             # def tokenize(obj):
             #     if obj is None:

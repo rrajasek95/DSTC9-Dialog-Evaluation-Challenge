@@ -166,7 +166,7 @@ def collate_batch_elements(batch, tokenizer, args):
 
 def get_sentence_loader(args, tokenizer):
     if args.dataset_configuration == "dstc9":
-        topical_chat = get_dataset_sentence_generation(tokenizer, args.dataset_path, args.dataset_cache, args.training_configuration)
+        topical_chat = get_dataset_sentence_generation(tokenizer, args.dataset_path, args.dataset_cache, args.training_configuration, args.knowledge_policy)
     else:
         label_scheme = TRAINING_CONFIG_LABEL_SCHEME.get(args.training_configuration)
         topical_chat = augmented_tc_dataset(tokenizer, args.dataset_path, args.dataset_cache,
@@ -326,7 +326,6 @@ def generate_submissions_sent(args):
                 cache_file["outputs"] = outputs
                 cache_file["i"] = i
                 torch.save(cache_file, args.submission_cache_path)
-                save_outputs_and_plan([], args, outputs)
 
     save_outputs_and_plan([], args, outputs)
 
@@ -450,7 +449,7 @@ if __name__ == '__main__':
                         help="Nucleus filtering (top-p) before sampling (<=0.0: no filtering)")
     parser.add_argument("--no_sample", action='store_true', help="Set to use greedy decoding instead of sampling")
     parser.add_argument("--max_length", type=int, default=50, help="Maximum length of the output utterances")  # 95% of the reply lengths do not exceed 50
-    parser.add_argument("--knowledge_policy", type=str, default="bert", choices=["tf_idf", "embeddings", "infersent", "bert"])
+    parser.add_argument("--knowledge_policy", type=str, default="bert", choices=["tf_idf", "embeddings", "infersent", "bert", "bert_sentence"])
 
     args = parser.parse_args()
     args.distributed = (args.local_rank != -1)
