@@ -125,7 +125,6 @@ class TopicalChatsDataset(Dataset):
         instance["input_ids"] = list(chain(*sequence))
         instance["token_type_ids"] = [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence) for _ in s]
         instance["mc_token_ids"] = len(instance["input_ids"]) - 1
-        print(tokenizer.decode(instance["input_ids"]))
         """
         Explanation:
         lm_labels is token-wise mask that is used to compute language modeling loss 
