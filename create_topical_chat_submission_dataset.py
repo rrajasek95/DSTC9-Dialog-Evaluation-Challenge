@@ -144,7 +144,7 @@ def create_knowledge_file(turn_count, keys, cur_convo_id, split_data, reading_se
             turn_knowledge.append(segment_knowledge)
         total_knowledge.append(turn_knowledge)
         turn_count += 1
-    with open('valid_freq_facts_bert.txt', 'w') as f:
+    with open('valid_freq_facts_bert_3.txt', 'w') as f:
         for item in total_knowledge:
             fact_string = ""
             for s in item:
@@ -159,17 +159,17 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset_path", type=str, default="./",
                         help="Path of the cached Topical Chat Dataset")
-    parser.add_argument('--key_file', type=str, default="processed_output/test_freq.keys",
+    parser.add_argument('--key_file', type=str, default="processed_output/valid_freq.keys",
                         help="path to key file of dstc9")
     parser.add_argument("--knowledge_policy", type=str, default="bert_sentence", choices=["tf_idf", "embeddings", "infersent", "bert", "bert_sentence"])
     parser.add_argument('--knowledge_index_path', type=str, default="./tc_processed/tc_knowledge_index_bert_all.pkl",
                         help="Path to knowledge index file")
     parser.add_argument('--model_metadata_path', type=str, default='./runs/bert_sentence_generation',
                         help='Path to the tokenizer and model configuration')
-    parser.add_argument('--create_knowledge', type=bool, default=False,
+    parser.add_argument('--create_knowledge', type=bool, default=True,
                         help='generate just the knowledge')
     args = parser.parse_args()
-    # create_topical_chat_dict(args)
+    create_topical_chat_dict(args)
 
     dataset = torch.load("test_freq_cache")
 

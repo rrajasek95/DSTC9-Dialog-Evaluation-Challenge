@@ -35,6 +35,13 @@ def segment_src(src):
         segmented_conversations.append(segmented_conversation)
     return segmented_conversations
 
+def segment_fact(fct):
+    segmented_conversations = []
+    for conversation in fct:
+        doc = conversation[:-1].split(";")
+        segmented_conversations.append([segment for segment in doc])
+    return segmented_conversations
+
 def segment_tgt(tgt):
     nlp = English()
     sentencizer = nlp.create_pipe("sentencizer")
@@ -59,16 +66,18 @@ def load_data(dataset_path, split, training_configuration, generation_config):
         return prepare_sentence_wise_data(fct, path_prefix, src, tgt, training_configuration)
 
 
-def load_data_for_sentence_generation(dataset_path, split, training_configuration):
+def load_data_for_sentence_generation(dataset_path, split, training_configuration, knowledge_policy="baseline"):
     path_prefix = os.path.join(dataset_path, split)
 
     # Splitting history into multiple sentences for ease of further processing
     src = [l.strip().split("_eos")[:-1] for l in open(path_prefix + '.src').readlines()]
     tgt = [l.strip().replace("_go", "").replace("_eos", "") for l in open(path_prefix + '.tgt').readlines()]
     fct = [l.strip() for l in open(path_prefix + '.fct').readlines()]
-
-    segmented_conversation_contexts = segment_src(src)
     segmented_responses = segment_tgt(tgt)
+    segmented_conversation_contexts = segment_src(src)
+
+    if knowledge_policy == "bert_sentence":
+        fct = segment_fact(fct)
 
     if training_configuration != "baseline":
         history_da, history_knowledge, resp_da = load_da_history_data(path_prefix, training_configuration)
@@ -200,7 +209,7 @@ def get_dataset(tokenizer, dataset_path, dataset_cache, training_configuration, 
         torch.save(dataset, dataset_cache)
     return dataset
 
-def get_dataset_sentence_generation(tokenizer, dataset_path, dataset_cache, training_configuration):
+def get_dataset_sentence_generation(tokenizer, dataset_path, dataset_cache, training_configuration, knowledge_policy="baseline"):
     dataset_cache = dataset_cache + '_' + type(tokenizer).__name__
     if dataset_cache and os.path.isfile(dataset_cache):
         logger.info("Load tokenized dataset from cache at %s", dataset_cache)
@@ -212,7 +221,7 @@ def get_dataset_sentence_generation(tokenizer, dataset_path, dataset_cache, trai
         dataset = dict()
 
         for split in splits:
-            data_items = load_data_for_sentence_generation(dataset_path, split, training_configuration)
+            data_items = load_data_for_sentence_generation(dataset_path, split, training_configuration, knowledge_policy)
 
             # def tokenize(obj):
             #     if obj is None:
@@ -339,7 +348,7 @@ def process_split_sentence(dataset_path, split, tokenizer, index, ranker):
 def prepare_sentence_knowledge_data(agent_mapping, conv_id, dialog_act, tokenizer, turn, sentence, ranker, da_index):
     knowledge_sentence = ranker.get_top_fact(clean(sentence), conv_id, threshold=True)
     original_knowledge_sentence = agent_mapping[turn["agent"]].get(knowledge_sentence, "")
-    return tokenizer.encode(sentence), None, tokenizer.encode(original_knowledge_sentence)
+    return tokenizer.encode(sentence), [turn[dialog_act][da_index]], tokenizer.encode(original_knowledge_sentence)
 
 
 

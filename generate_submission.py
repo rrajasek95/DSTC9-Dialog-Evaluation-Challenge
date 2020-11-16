@@ -166,7 +166,7 @@ def collate_batch_elements(batch, tokenizer, args):
 
 def get_sentence_loader(args, tokenizer):
     if args.dataset_configuration == "dstc9":
-        topical_chat = get_dataset_sentence_generation(tokenizer, args.dataset_path, args.dataset_cache, args.training_configuration)
+        topical_chat = get_dataset_sentence_generation(tokenizer, args.dataset_path, args.dataset_cache, args.training_configuration, args.knowledge_policy)
     else:
         label_scheme = TRAINING_CONFIG_LABEL_SCHEME.get(args.training_configuration)
         topical_chat = augmented_tc_dataset(tokenizer, args.dataset_path, args.dataset_cache,
@@ -176,9 +176,9 @@ def get_sentence_loader(args, tokenizer):
     for split in splits:
         if split != args.split:
             del topical_chat[split]
-
+    torch.save(topical_chat, "cache")
     if args.training_configuration == "baseline":
-        dataset = TopicalChatsSentGenerationDataset(topical_chat, tokenizer, SPECIAL_TOKENS, args)
+        dataset = TopicalChatsSentGenerationDataset(topical_chat[args.split], tokenizer, SPECIAL_TOKENS, args)
     else:
         dataset = TopicalChatsKDSentGenerationDataset(topical_chat[args.split], tokenizer, SPECIAL_TOKENS, args)
     sampler = torch.utils.data.distributed.DistributedSampler(dataset) if args.distributed else None
@@ -300,18 +300,32 @@ def generate_submissions_sent(args):
 
     model = data["mymodel"]
     model.to(args.device)
-
     outputs = []
+
+    cache_file = {}
+    completed_index = -1
+    if os.path.isfile(args.submission_cache_path):
+        logger.info("Load previous submission from cache at %s", args.submission_cache_path)
+        cache_file = torch.load(args.submission_cache_path)
+        outputs = cache_file["outputs"]
+        completed_index = cache_file["i"]
+
     loader, sampler, dataset = get_sentence_loader(args, tokenizer)
     with torch.no_grad():
         for i, batch in tqdm(enumerate(loader)):
-
+            if completed_index >= 0:
+                completed_index -= 1
+                continue
             example = batch[0][0]
 
             output = generate_sentence_wise_output(model, tokenizer, dataset, example, args)
+            outputs.append(output.replace('\n', '') + '\n')
             if i % args.log_every_n == 0:
                 logger.info(output)
-            outputs.append(output.replace('\n', '') + '\n')
+                logger.info("Saving outputs to cache at %s", args.submission_cache_path)
+                cache_file["outputs"] = outputs
+                cache_file["i"] = i
+                torch.save(cache_file, args.submission_cache_path)
 
     save_outputs_and_plan([], args, outputs)
 
@@ -396,21 +410,21 @@ if __name__ == '__main__':
     parser.add_argument('--training_configuration', type=str, default="kd-pd-nrg-swbd",
                         help="Training configuration to run",
                         choices=["baseline", "kd-pd-nrg", "kd-pd-nrg-swbd", "sentiment"])
-    parser.add_argument('--dataset_configuration', type=str, default="topical-chats",
+    parser.add_argument('--dataset_configuration', type=str, default="dstc9",
                         help="Configuration of dataset to load for training",
                         choices=["dstc9", "topical-chats", 'athena-questions'])
-    parser.add_argument('--generation_configuration', type=str, default='turn',
+    parser.add_argument('--generation_configuration', type=str, default='sentence',
                         choices=['turn', 'sentence'])
     parser.add_argument('--heuristic_policy', action='store_true',
                         help="Enable heuristic dialog policy for generation (as opposed to using ground truth)")
     parser.add_argument('--knowledge_index_path', type=str, default="./tc_processed/tc_knowledge_index_bert_all.pkl",
                         help="Path to knowledge index file")
-    parser.add_argument('--model_checkpoint', type=str, default="runs/bert_swbd_pd_nrg/",
+    parser.add_argument('--model_checkpoint', type=str, default="runs/bert_sentence_swbd/",
                         help="Path, url or short name of the model")
     parser.add_argument("--split", type=str,
                         default='valid_freq',
                         help='Split file of the dataset (athena/topical chats) to generate outputs for')
-    parser.add_argument('--model_metadata_path', type=str, default='./runs/bert_swbd_pd_nrg',
+    parser.add_argument('--model_metadata_path', type=str, default='./runs/bert_sentence_swbd',
                         help='Path to the tokenizer and model configuration')
     parser.add_argument("--num_candidates", type=int, default=2, help="Number of candidates for training")
     parser.add_argument('--dataset_cache', type=str, default='./dataset_caches', help='Path or url of the dataset cache')
@@ -435,7 +449,7 @@ if __name__ == '__main__':
                         help="Nucleus filtering (top-p) before sampling (<=0.0: no filtering)")
     parser.add_argument("--no_sample", action='store_true', help="Set to use greedy decoding instead of sampling")
     parser.add_argument("--max_length", type=int, default=50, help="Maximum length of the output utterances")  # 95% of the reply lengths do not exceed 50
-    parser.add_argument("--knowledge_policy", type=str, default="bert", choices=["tf_idf", "embeddings", "infersent", "bert"])
+    parser.add_argument("--knowledge_policy", type=str, default="bert", choices=["tf_idf", "embeddings", "infersent", "bert", "bert_sentence"])
 
     args = parser.parse_args()
     args.distributed = (args.local_rank != -1)
