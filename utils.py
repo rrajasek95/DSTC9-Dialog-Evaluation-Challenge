@@ -486,6 +486,13 @@ def augmented_tc_dataset(tokenizer, dataset_path, dataset_cache, knowledge_index
 
     return dataset
 
+import re
+tag_pattern = re.compile('<.*?>')
+
+def clean_athena_response(text):
+    return re.sub(tag_pattern, '', text)
+
+
 def process_athena_questions_split(tokenizer, topic_question_data):
 
     examples = []
@@ -502,7 +509,7 @@ def process_athena_questions_split(tokenizer, topic_question_data):
     for index, item in topic_question_data.iterrows():
 
         context = item['text']
-        athena_response = item['response']
+        athena_response = clean_athena_response(item['response'])
         # All contexts are single turn
 
         example = ([context], athena_response)
@@ -573,14 +580,3 @@ def make_path(path):
     :return:
     """
     os.makedirs(path, exist_ok=True)
-
-
-if __name__ == '__main__':
-    pass
-    # generate_references_for_split('tc_processed', None, 'valid_freq', 'tc_processed/valid_freq.tgt')
-    # tokenizer = GPT2Tokenizer.from_pretrained('gpt2-large')
-    # dataset_path = 'processed_output'
-    # dataset_cache = './dataset_cache'
-    #
-    #
-    # get_dataset(tokenizer, dataset_path, dataset_cache)
