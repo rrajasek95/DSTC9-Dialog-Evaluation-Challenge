@@ -204,7 +204,12 @@ def collate_batch_elements(batch, tokenizer, args):
         for field, data in instance.items():
             batch_inputs[field].append(data)
 
-    padded_dataset = pad_dataset(batch_inputs, padding=tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS[-2]))
+    if args.freeze_embeddings:
+        pad_token = tokenizer.eos_token_id
+    else:
+        pad_token = tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS[-2])
+
+    padded_dataset = pad_dataset(batch_inputs, padding=pad_token)
 
     tensorized_input = []
     # Verify input sent the same way:
@@ -505,7 +510,13 @@ def train():
 
 
     orig_num_tokens = len(tokenizer.encoder)
-    num_added_tokens = add_special_tokens_(tokenizer, args.training_configuration)
+
+    if not args.freeze_embeddings:
+        # If embeddings are frozen, then new tokens can't be added to the vocabulary
+        # since they cannot be updated nor reused in other contexts
+        num_added_tokens = add_special_tokens_(tokenizer, args.training_configuration)
+    else:
+        num_added_tokens = 0
 
     # Initialize distributed training if needed
     args.distributed = (args.local_rank != -1)
@@ -540,7 +551,8 @@ def train():
             model = model_class.from_pretrained(args.model_checkpoint,
                                                 bottleneck_size=args.bottleneck_size,
                                                 layer_norm_after_adapter=args.layer_norm_after_adapter,
-                                                adapter_after_attn=args.adapter_after_attn)
+                                                adapter_after_attn=args.adapter_after_attn,
+                                                freeze_embeddings=args.freeze_embeddings)
         else:
             model = model_class.from_pretrained(args.model_checkpoint)
 

@@ -23,6 +23,7 @@ class TopicalChatsDataset(Dataset):
         self.max_history = args.max_history
         self.num_candidates = args.num_candidates
         self.max_fact_length = args.max_fact_length
+        self.freeze_embeddings = args.freeze_embeddings
 
     def __getitem__(self, index):
         """
@@ -98,17 +99,33 @@ class TopicalChatsDataset(Dataset):
 
         bos, eos, speaker1, speaker2 = tokenizer.convert_tokens_to_ids((self.special_tokens[:4]))
 
+        # TODO: Fix this logic as this has become a leaky abstraction
+        #       when we are forced to freeze embeddings
+        #       perhaps this logic could be moved to __init__ rather than __getitem__ flow
+        if self.freeze_embeddings:
+            bos_tokens = tokenizer.encode(self.special_tokens[0])
+            eos_tokens = tokenizer.encode(self.special_tokens[1])
+        else:
+            bos_tokens = [bos]
+            eos_tokens = [eos]
 
-        sequence = [[bos] + fact] + history + [response + [eos]]
 
-        sequence = [sequence[0]] + [[speaker2 if (len(sequence) - i) % 2 else speaker1] + s for i, s in
+        sequence = [bos_tokens + fact] + history + [response + eos_tokens]
+
+        def get_speaker_tokens(i, sequence):
+            if self.freeze_embeddings:
+                return tokenizer.encode(self.special_tokens[2] if (len(sequence) - i) % 2 else self.special_tokens[3])
+            else:
+                return [speaker2 if (len(sequence) - i) % 2 else speaker1]
+
+        sequence = [sequence[0]] + [get_speaker_tokens(i, sequence) + s for i, s in
                                     enumerate(sequence[1:])]
 
         instance = {}
         instance["input_ids"] = list(chain(*sequence))
         instance["token_type_ids"] = [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence) for _ in s]
         instance["mc_token_ids"] = len(instance["input_ids"]) - 1
-
+        print(tokenizer.decode(instance["input_ids"]))
         """
         Explanation:
         lm_labels is token-wise mask that is used to compute language modeling loss 
