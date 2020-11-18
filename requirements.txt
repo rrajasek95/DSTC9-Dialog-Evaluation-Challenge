@@ -72,7 +72,7 @@ neuralcoref==4.0.0
 nlg-eval @ git+https://github.com/Maluuba/nlg-eval.git@4855e70301dcfb1d4943eb6c4d1213201e4f4b98
 nlp==0.3.0
 nltk==3.4.5
-notebook==6.0.3
+notebook==6.1.5
 numpy==1.18.1
 oauthlib==3.1.0
 packaging==20.4
