@@ -408,8 +408,8 @@ class GPT2Model(GPT2PreTrainedModel):
         self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([Block(config.n_ctx, config, scale=True) for _ in range(config.n_layer)])
         self.ln_f = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
-        if config.freeze_embeddings:
-            self._freeze_embeddings()
+        # if config.freeze_embeddings:
+        #     self._freeze_embeddings()
         self.init_weights()
 
     def get_input_embeddings(self):
@@ -487,10 +487,10 @@ class GPT2Model(GPT2PreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        if self.config.freeze_embeddings:
-            # input segment embeddings don't make sense
-            # to be applied if word embeddings are frozen
-            token_type_ids = None
+        # if self.config.freeze_embeddings:
+        #     # input segment embeddings don't make sense
+        #     # to be applied if word embeddings are frozen
+        #     token_type_ids = None
 
         if token_type_ids is not None:
             token_type_ids = token_type_ids.view(-1, input_shape[-1])
