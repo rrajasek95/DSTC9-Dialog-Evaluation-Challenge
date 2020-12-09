@@ -453,6 +453,10 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     args.distributed = (args.local_rank != -1)
+
+    # We have un-frozen word embeddings
+    args.freeze_embeddings = False
+
     logging.basicConfig(level=logging.INFO if args.local_rank in [-1, 0] else logging.WARN)
     logger.warning("Running process %d",
                    args.local_rank)  # This is a logger.warning: it will be printed by all distributed processes
