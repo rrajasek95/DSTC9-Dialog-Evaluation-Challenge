@@ -81,7 +81,7 @@ def decode_sequences(input_ids, token_type_ids, model, tokenizer, args):
 
             prev = torch.topk(probs, 1)[1] if args.no_sample else torch.multinomial(probs, 1)
             if prev.item() in special_tokens_ids:
-                patience = 10
+                patience = 3
                 while prev.item() in special_tokens_ids:
                     if probs.max().item() == 1 or patience == 0:
                         # Disabled this rather noisy warning
