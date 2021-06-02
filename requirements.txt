@@ -149,7 +149,7 @@ tqdm==4.46.1
 traitlets==4.3.3
 transformers==3.0.2
 ujson # @ file:///tmp/build/80754af9/ujson_1592441221780/work
-urllib3==1.25.9
+urllib3==1.26.5
 wcwidth # @ file:///tmp/build/80754af9/wcwidth_1593447189090/work
 webencodings==0.5.1
 Werkzeug==1.0.1
