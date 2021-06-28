@@ -1,0 +1,5 @@
+outs:
+- md5: 722ecaaad7b7eaf6c824ef52ae5d5412.dir
+  size: 18137358
+  nfiles: 10
+  path: intermediate
