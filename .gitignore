@@ -14,3 +14,5 @@ data/processed
 
 # Model checkpoints that don't need to be committed (they'll be separately DVC'ed)
 models/
+
+*.ipynb_checkpoints
