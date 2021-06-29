@@ -14,8 +14,25 @@ SPLITS = (
     "test_rare"
 )
 
-def annotate_topical_chat_parquet(split_file):
-    pass
+def annotate_topical_chat_parquet(args):
+    os.makedirs(args.output_path, exist_ok=True)
+
+    nltk_sentence_segmenter = NltkSentenceSegmenter()
+    swda_annotator = SwDATagger(args.swda_tagger_model_path)
+
+    for split in SPLITS:
+        split_messages_parquet = os.path.join(args.messages_path, f"{split}.parquet")
+        split_messages_dataframe = pd.read_parquet(split_messages_parquet)
+
+        print(f"Annotating segments for split '{split}'")
+        split_messages_dataframe['segments'] = nltk_sentence_segmenter.annotate_series(
+            split_messages_dataframe['message'])
+
+        swda_tagged_with_split_messages_dataframe = swda_annotator.annotate_df(split_messages_dataframe)
+
+        annotated_split_data_path = os.path.join(args.output_path, f"{split}.parquet")
+        swda_tagged_with_split_messages_dataframe.to_parquet(annotated_split_data_path)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -27,21 +44,4 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    os.makedirs(args.output_path, exist_ok=True)
-
-    nltk_sentence_segmenter = NltkSentenceSegmenter()
-    swda_annotator = SwDATagger(args.swda_tagger_model_path)
-
-
-    for split in SPLITS:
-        split_messages_parquet = os.path.join(args.messages_path, f"{split}.parquet")
-        split_messages_dataframe = pd.read_parquet(split_messages_parquet)
-
-        print(f"Annotating segments for split '{split}'")
-        split_messages_dataframe['segments'] = nltk_sentence_segmenter.annotate_series(split_messages_dataframe['message'])
-
-        swda_tagged_with_split_messages_dataframe = swda_annotator.annotate_df(split_messages_dataframe)
-
-
-        annotated_split_data_path = os.path.join(args.output_path, f"{split}.parquet")
-        swda_tagged_with_split_messages_dataframe.to_parquet(annotated_split_data_path)
+    annotate_topical_chat_parquet(args)

@@ -72,16 +72,90 @@ def convert_tc_conversations_to_parquet(conversations_path, output_base_path, sp
     print("Successfully saved all conversation data!")
 
 
+def create_fact_set_entry(conversation_id, agent, fact_set, fact_type, fact_data):
 
-def convert_tc_reading_sets_to_parquet(reading_sets_path):
-    pass
+
+    return {
+        "conversation_id": conversation_id,
+        "agent": agent,
+        "fact_set_id": fact_set,
+        "fact_type": fact_type,
+        "data": fact_data if isinstance(fact_data, str) else None,
+        "list_data": fact_data if isinstance(fact_data, list) else None  # Parquet needs data types to be homogeneous
+    }
+
+def extract_conversation_reading_set_items(conversation_id, conversation_reading_set):
+
+
+
+    conversation_items = []
+
+    # Extracting agent items
+    for agent in ["agent_1", "agent_2"]:
+        agent_reading_set = conversation_reading_set[agent]
+
+        for fact_set_id, fact_set in agent_reading_set.items():
+            for fact_type, fact_data in fact_set.items():
+                conversation_items.append(
+                    create_fact_set_entry(conversation_id, agent, fact_set_id, fact_type, fact_data))
+
+    article_data = conversation_reading_set["article"]
+
+    for item_type, data in article_data.items():
+        conversation_items.append(create_fact_set_entry(conversation_id, "both", "article", item_type, data))
+
+    return conversation_items
+
+
+
+
+
+
+def convert_tc_reading_sets_to_parquet(reading_sets_path, output_base_path, splits=TOPICAL_CHAT_SPLITS):
+    output_reading_set_paths = os.path.join(output_base_path, "reading_sets")
+    output_metadata_path = os.path.join(output_reading_set_paths, "meta")
+
+    os.makedirs(output_reading_set_paths, exist_ok=True)
+    os.makedirs(output_metadata_path, exist_ok=True)
+
+    for split in splits:
+        split_reading_set_path = os.path.join(reading_sets_path, "post-build", f"{split}.json")
+
+        split_reading_set = load_json_from_path(split_reading_set_path)
+
+        reading_sets_metadata = []
+
+        reading_set_items = []
+
+        for conversation_id, conversation_reading_set in tqdm(split_reading_set.items()):
+
+            reading_set_metadata = {
+                "conversation_id": conversation_id,
+                "config": conversation_reading_set['config']
+            }
+
+            reading_set_items.extend(extract_conversation_reading_set_items(conversation_id, conversation_reading_set))
+            reading_sets_metadata.append(reading_set_metadata)
+
+        reading_set_dataframe = pd.DataFrame.from_records(reading_set_items)
+        reading_set_metadata_dataframe = pd.DataFrame.from_records(reading_sets_metadata)
+
+        reading_set_dataframe.to_parquet(os.path.join(output_reading_set_paths, f"{split}.parquet"))
+        reading_set_metadata_dataframe.to_parquet(os.path.join(output_metadata_path, f"{split}.parquet"))
+
+        print(f"Successfully saved data for split '{split}'")
+
+
+def prepare_topical_chats_parquet(conversations_path, reading_sets_path, output_path):
+    convert_tc_conversations_to_parquet(args.conversations_path, args.output_path)
+    convert_tc_reading_sets_to_parquet(args.reading_sets_path, args.output_path)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--conversations_path', default="data/external/alexa-prize-topical-chat-dataset/conversations",
                         help="Path to Topical Chat conversations")
-    parser.add_argument('--reading_set_path', default="data/external/alexa-prize-topical-chat-dataset/reading_sets",
+    parser.add_argument('--reading_sets_path', default="data/external/alexa-prize-topical-chat-dataset/reading_sets",
                         help="Path to Topical Chat reading sets")
     parser.add_argument('--output_path', default="data/intermediate/topical_chat_parquet/",
                         help="Path to the processed output files"
@@ -89,4 +163,4 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    convert_tc_conversations_to_parquet(args.conversations_path, args.output_path)
+    prepare_topical_chats_parquet(args.conversations_path, args.reading_sets_path, args.output_path)
