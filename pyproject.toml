@@ -19,6 +19,7 @@ fasttext = "^0.9.2"
 dill = "^0.3.4"
 torchtext = "0.3.1"
 nltk = "^3.6.2"
+sentence-transformers = "^2.0.0"
 
 [tool.poetry.dev-dependencies]
 
