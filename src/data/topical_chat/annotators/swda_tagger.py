@@ -4,8 +4,8 @@ import pandas as pd
 import torch
 import torch.nn as nn
 
-from annotators.bcrf import BiLSTM_CRF
-from annotators.base_annotator import AnnotatorBase
+from .swda.bcrf import BiLSTM_CRF
+from .base_annotator import AnnotatorBase
 
 # A hardcoded constant that was taken from the BiLSTM-CRF training project
 from tqdm import tqdm
@@ -15,7 +15,7 @@ UNK = "_UNK_"
 
 class SwDATagger(AnnotatorBase):
 
-    def _build_embeddings(self, opt, field, embedding_size):
+    def _build_embeddings(self, field, embedding_size):
         vocab_size = len(field.vocab)
         pad_idx = field.vocab.stoi[PAD]
 
@@ -39,7 +39,7 @@ class SwDATagger(AnnotatorBase):
         opt = model_data["opt"]
         embedding_size = opt.word_vec_size
 
-        embeddings = self._build_embeddings(opt, fields["conversation"], embedding_size)
+        embeddings = self._build_embeddings(fields["conversation"], embedding_size)
 
         model = self._build_model(opt, fields, embeddings)
 
@@ -65,7 +65,6 @@ class SwDATagger(AnnotatorBase):
             .progress_apply(lambda segments: [nltk.word_tokenize(segment.lower()) for segment in segments])\
             .apply(lambda tok_segments: [segment_tokens if len(segment_tokens) > 1 else [UNK] for segment_tokens in tok_segments])
 
-
         messages_dataframe['segment_tokens'] = tokenized_segments
 
         messages_dataframe['segment_to_turn_idx'] = messages_dataframe.apply(
@@ -85,7 +84,6 @@ class SwDATagger(AnnotatorBase):
 
         # Re-group by conversation_id and turn, just like in the original_df
         turn_wise_predictions = exploded_df.groupby(["conversation_id", "turn_index"]).agg(list)
-
 
         merged_dataframe = messages_dataframe.merge(turn_wise_predictions, on=["conversation_id", "turn_index"])
 

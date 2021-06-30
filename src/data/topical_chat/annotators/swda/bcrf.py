@@ -2,7 +2,7 @@ import torch
 import numpy as np
 from torch import nn
 try:
-    from annotators.Crf import CRF
+    from .Crf import CRF
 except ModuleNotFoundError as e:
     from DA_Classifier.Crf import CRF
 

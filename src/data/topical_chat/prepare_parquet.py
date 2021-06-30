@@ -73,8 +73,6 @@ def convert_tc_conversations_to_parquet(conversations_path, output_base_path, sp
 
 
 def create_fact_set_entry(conversation_id, agent, fact_set, fact_type, fact_data):
-
-
     return {
         "conversation_id": conversation_id,
         "agent": agent,
@@ -84,9 +82,8 @@ def create_fact_set_entry(conversation_id, agent, fact_set, fact_type, fact_data
         "list_data": fact_data if isinstance(fact_data, list) else None  # Parquet needs data types to be homogeneous
     }
 
+
 def extract_conversation_reading_set_items(conversation_id, conversation_reading_set):
-
-
 
     conversation_items = []
 
@@ -105,10 +102,6 @@ def extract_conversation_reading_set_items(conversation_id, conversation_reading
         conversation_items.append(create_fact_set_entry(conversation_id, "both", "article", item_type, data))
 
     return conversation_items
-
-
-
-
 
 
 def convert_tc_reading_sets_to_parquet(reading_sets_path, output_base_path, splits=TOPICAL_CHAT_SPLITS):
@@ -147,8 +140,9 @@ def convert_tc_reading_sets_to_parquet(reading_sets_path, output_base_path, spli
 
 
 def prepare_topical_chats_parquet(conversations_path, reading_sets_path, output_path):
-    convert_tc_conversations_to_parquet(args.conversations_path, args.output_path)
-    convert_tc_reading_sets_to_parquet(args.reading_sets_path, args.output_path)
+    convert_tc_conversations_to_parquet(conversations_path, output_path)
+    convert_tc_reading_sets_to_parquet(reading_sets_path, output_path)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -157,7 +151,7 @@ if __name__ == '__main__':
                         help="Path to Topical Chat conversations")
     parser.add_argument('--reading_sets_path', default="data/external/alexa-prize-topical-chat-dataset/reading_sets",
                         help="Path to Topical Chat reading sets")
-    parser.add_argument('--output_path', default="data/intermediate/topical_chat_parquet/",
+    parser.add_argument('--output_path', default="data/intermediate/topical_chat/parquet/",
                         help="Path to the processed output files"
                         )
 
