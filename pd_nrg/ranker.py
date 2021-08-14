@@ -90,14 +90,32 @@ class ElasticRankerRetriever(object):
 
 
 class BertRankerRetriever(object):
+    def _generate_flattened_knowledge_vecs(self):
+        flattened_knowledge_vecs = []
+        for _, flattened_list in self.knowledge_vecs.items():
+            flattened_knowledge_vecs.extend(flattened_list)
+
+        return flattened_knowledge_vecs
+
     def __init__(self, knowledge_index):
         self.knowledge_vecs = knowledge_index["knowledge_vecs"]
+        self.flattened_knowledge_vecs = self._generate_flattened_knowledge_vecs()
+
         self.model = SentenceTransformer('bert-base-nli-stsb-mean-tokens')
         self.threshold = 0.35
 
-    def get_top_fact(self, query, convo_id, threshold=False):
+    def _get_top_fact_conversation(self, query, convo_id):
         knowledge = self.knowledge_vecs[convo_id]
-        fact, sim = get_max_cosine_similarity_embs_models(clean(query), knowledge, self.model, knowledge_policy="bert")
+        return get_max_cosine_similarity_embs_models(clean(query), knowledge, self.model, knowledge_policy="bert")
+
+    def _get_top_fact_conversation_independent(self, query):
+        return get_max_cosine_similarity_embs_models(clean(query), self.flattened_knowledge_vecs, self.model, knowledge_policy="bert")
+
+    def get_top_fact(self, query, convo_id = None, threshold=False):
+        if convo_id is not None:
+            fact, sim = self._get_top_fact_conversation(query, convo_id)
+        else:
+            fact, sim = self._get_top_fact_conversation_independent(query)
 
         if threshold:
             knowledge_sentence = fact if sim > self.threshold else ""
