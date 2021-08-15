@@ -62,13 +62,12 @@ def generate_examples_from_conversations(conversation_dataframe, processing_para
         if turn.conversation_id != current_conversation_id:
             conversations.append(conversation_turns)
             conversation_turns = []
+            current_conversation_id = turn.conversation_id
         else:
             conversation_turns.append(turn)
     conversations.append(conversation_turns)
 
-
     examples = []
-
     for conversation in tqdm(conversations):
         examples.extend(
             extract_conversation_examples(conversation,
