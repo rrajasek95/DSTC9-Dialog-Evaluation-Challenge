@@ -38,7 +38,7 @@ class SentenceTransformerRetriever:
         scores = util.pytorch_cos_sim(query_embedding, corpus_embeddings)
 
         best_match = torch.topk(scores, 1)
-        score = best_match[0]
+        score = float(best_match[0])
         index = best_match[1]
 
         return corpus[index], score

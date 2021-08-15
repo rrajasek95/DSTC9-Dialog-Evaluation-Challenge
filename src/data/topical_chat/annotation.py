@@ -34,7 +34,9 @@ def annotate_topical_chat_parquet(args):
             split_messages_dataframe['message'])
 
         print(f"Retrieving knowledge for split '{split}")
-        split_messages_dataframe['knowledge'] = knowledge_retriever.annotate_df(split_messages_dataframe)
+        knowledge_score = knowledge_retriever.annotate_df(split_messages_dataframe)
+        split_messages_dataframe['knowledge'] = knowledge_score.apply(lambda x: x[0])
+        split_messages_dataframe['knowledge_similarity_score'] = knowledge_score.apply(lambda x: x[1])
 
         print(f"Dialog act tagging segments for split '{split}'")
         swda_tagged_with_split_messages_dataframe = swda_annotator.annotate_df(split_messages_dataframe)

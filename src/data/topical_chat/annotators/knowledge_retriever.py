@@ -11,7 +11,7 @@ class KnowledgeRetriever(AnnotatorBase):
         tqdm.pandas()
 
         print("Retrieving knowledge")
-        knowledge_sentences = messages_df.progress_apply(lambda row: self.retriever.query(row['message'], row['conversation_id'])[0], axis=1)
+        knowledge_sentence_scores = messages_df.progress_apply(lambda row: self.retriever.query(row['message'], row['conversation_id']), axis=1)
         print("Retrieval completed!")
 
-        return knowledge_sentences
+        return knowledge_sentence_scores
