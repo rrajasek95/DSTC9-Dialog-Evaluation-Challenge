@@ -1,35 +1,81 @@
 import argparse
+import functools
+import pickle
 
 import torch.cuda
+from torch.utils.data.dataloader import DataLoader
 
+from transformers import GPT2Tokenizer, AdamW, GPT2DoubleHeadsModel
+
+from utils.dataloader import collate_double_heads_data
 from utils.trainer import GPT2DoubleHeadLMTrainer
+from datasets.pd_nrg import PdNrgDataset
 
 
-def train_model(args):
-    pass
+def load_model_and_tokenizer(model_checkpoint_path, tokenizer_path):
+    gpt2_model = GPT2DoubleHeadsModel.from_pretrained(model_checkpoint_path)
+    gpt2_tokenizer = GPT2Tokenizer.from_pretrained(tokenizer_path)
+
+    gpt2_model.resize_token_embeddings(new_num_tokens=len(gpt2_tokenizer))
+
+    return gpt2_model, gpt2_tokenizer
+
+
+def load_training_data(train_data_path):
+    with open(train_data_path, 'rb') as train_data_file:
+        training_data = pickle.load(train_data_file)
+        return PdNrgDataset(training_data)
+
+
+def train_model(model, tokenizer, training_dataset, training_configuration):
+    optimizer = AdamW(model.parameters(), lr=training_configuration["lr"], correct_bias=True)
+
+    data_collate_fn = lambda batch: collate_double_heads_data(batch, 0)
+
+    train_loader = DataLoader(training_dataset, batch_size=training_configuration["train_batch_size"],
+                              collate_fn=data_collate_fn, shuffle=True)
+
+    trainer = GPT2DoubleHeadLMTrainer(model, optimizer, log_every_n=training_configuration['log_every_n'])
+    trainer.train(train_loader, 1)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--experiment_name', type=str, required=True, help="Name of the experiment ran")
-
-    parser.add_argument('--data_path', type=str)
-    parser.add_argument("--initial_checkpoint",
+    parser.add_argument('--data_path', type=str, default='data/processed/swbd_pd_nrg/training_data.pkl')
+    parser.add_argument("--model_checkpoint_path",
                         type=str,
                         default="gpt2-medium",
                         help="Name or path to initial model weights/checkpoint (for GPT-2 based models)")
+    parser.add_argument('--tokenizer_path',
+                        default="data/processed/swbd_pd_nrg/tokenizer",
+                        help="Path to tokenizer to use for training")
 
+    parser.add_argument('--device', default="cuda" if torch.cuda.is_available() else "cpu")
 
-    training_parameters = parser.add_argument_group('Training Parameters',
-                                                    'Lists the parameters for training the model')
-    training_parameters.add_argument('--lr', type=float, default=6.25e-5, help="Base learning rate for training")
-    training_parameters.add_argument('--num_epochs', type=int, default=3, help="Number of epochs to run training for")
-    training_parameters.add_argument('--train_batch_size', type=int, default=4, help="Batch size for train step")
-    training_parameters.add_argument('--valid_batch_size', type=int, default=8, help="Batch size for validation step")
-    training_parameters.add_argument('--log_every_n', type=int, default=500, help="Frequency of logging (in number of train steps)")
-    training_parameters.add_argument('--save_every_n', type=int, default=1800, help="Frequency of checkpoint save (in number of train steps)")
-    training_parameters.add_argument('--device', default="cuda" if torch.cuda.is_available() else "cpu")
-
+    training_args = parser.add_argument_group('Training Parameters',
+                                              'Lists the parameters for training the model')
+    training_args.add_argument('--lr', type=float, default=6.25e-5, help="Base learning rate for training")
+    training_args.add_argument('--num_epochs', type=int, default=3, help="Number of epochs to run training for")
+    training_args.add_argument('--train_batch_size', type=int, default=4, help="Batch size for train step")
+    training_args.add_argument('--valid_batch_size', type=int, default=8, help="Batch size for validation step")
+    training_args.add_argument('--log_every_n', type=int, default=500,
+                               help="Frequency of logging (in number of train steps)")
+    training_args.add_argument('--save_every_n', type=int, default=1800,
+                               help="Frequency of checkpoint save (in number of train steps)")
 
     args = parser.parse_args()
 
-    train_model(args)
+    model, tokenizer = load_model_and_tokenizer(args.model_checkpoint_path, args.tokenizer_path)
+    training_examples = load_training_data(args.data_path)
+
+    training_configuration = {
+        "lr": args.lr,
+        "num_epochs": args.num_epochs,
+        "train_batch_size": args.train_batch_size,
+        "valid_batch_size": args.valid_batch_size,
+        "log_every_n": args.log_every_n,
+        "save_every_n": args.save_every_n
+    }
+
+    train_model(model, tokenizer, training_examples, training_configuration)
