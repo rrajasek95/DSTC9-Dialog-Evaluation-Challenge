@@ -77,9 +77,14 @@ def prepare_training_instance_from_example(tokenizer, example, data_prep_paramet
 
     return training_instances
 
+def prepare_instances(features_dataframe, tokenizer, data_prep_parameters):
+    instances = []
+    for example in tqdm(features_dataframe.itertuples(name='Example')):
+        instances.append(prepare_training_instance_from_example(tokenizer, example, data_prep_parameters))
+    return instances
 
-def prepare_training_data(training_features_path, pretrained_model_checkpoint, path_to_output_tokenizer,
-                          path_to_output_train_data, data_prep_parameters):
+def prepare_training_data(training_features_path, validation_features_path, pretrained_model_checkpoint,
+                          path_to_output_tokenizer, path_to_output_data, data_prep_parameters):
     tokenizer = GPT2Tokenizer.from_pretrained(pretrained_model_checkpoint)
 
     add_tokens_to_vocabulary(tokenizer, SWBD_ADDITIONAL_TOKENS)
@@ -87,24 +92,31 @@ def prepare_training_data(training_features_path, pretrained_model_checkpoint, p
     tokenizer.save_pretrained(path_to_output_tokenizer)
 
     training_features = pd.read_parquet(training_features_path)
+    validation_features = pd.read_parquet(validation_features_path)
 
-    training_instances = []
-    for example in tqdm(training_features.itertuples(name='Example')):
-        training_instances.append(prepare_training_instance_from_example(tokenizer, example, data_prep_parameters))
+    training_instances = prepare_instances(training_features, tokenizer, data_prep_parameters)
+    validation_instances = prepare_instances(validation_features, tokenizer, data_prep_parameters)
 
     # Make parent directory
-    os.makedirs(os.path.dirname(path_to_output_train_data), exist_ok=True)
+    os.makedirs(path_to_output_data, exist_ok=True)
+
     # Save data
-    with open(path_to_output_train_data, 'wb') as training_data_file:
+    with open(os.path.join(path_to_output_data, "training.pkl"), 'wb') as training_data_file:
         pickle.dump(training_instances, training_data_file)
+    with open(os.path.join(path_to_output_data, "validation.pkl"), 'wb') as validation_data_file:
+        pickle.dump(validation_instances, validation_data_file)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--training_features_path', default='data/processed/swbd_pd_nrg/features/train.parquet',
                         help='Path to parquet file containing training features')
+    parser.add_argument('--validation_features_path', default='data/processed/swbd_pd_nrg/features/valid_freq.parquet',
+                        help='Path to parquet file containing validation features')
+
     parser.add_argument('--pretrained_model_checkpoint', default='gpt2-medium')
     parser.add_argument('--path_to_output_tokenizer', default='data/processed/swbd_pd_nrg/tokenizer')
-    parser.add_argument('--path_to_output_train_data', default='data/processed/swbd_pd_nrg/training_data.pkl')
+    parser.add_argument('--path_to_output_data', default='data/processed/swbd_pd_nrg/training')
+
     parser.add_argument('--max_knowledge_length', default=200, help='Maximum number of knowledge tokens to include')
 
     args = parser.parse_args()
@@ -113,7 +125,8 @@ if __name__ == '__main__':
         "max_knowledge_length": args.max_knowledge_length
     }
     prepare_training_data(args.training_features_path,
+                          args.validation_features_path,
                           args.pretrained_model_checkpoint,
                           args.path_to_output_tokenizer,
-                          args.path_to_output_train_data,
+                          args.path_to_output_data,
                           data_prep_parameters)

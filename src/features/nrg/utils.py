@@ -1,4 +1,4 @@
-from src.features.nrg.constants import ATTR_TO_SPECIAL_TOKEN
+from constants import ATTR_TO_SPECIAL_TOKEN
 
 
 def add_tokens_to_vocabulary(tokenizer, additional_tokens):
