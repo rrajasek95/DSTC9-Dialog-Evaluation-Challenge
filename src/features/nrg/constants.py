@@ -30,4 +30,4 @@ SWBD_ADDITIONAL_TOKENS = apply_tag_markers([
     'yes-answer', 'action-directive', 'backchannel', 'conventional-opening', 'thanking', 'agree', 'or-clause',
     'tag-question', 'spoken-artifact', 'apology', 'statement-opinion', 'hedge', 'offers-options-commits', '+',
     'downplayer', 'summarize-reformulate', 'yes-no-question', 'appreciation', 'signal-non-understanding'
-])
+]) + ["_fact", "_nofact"]

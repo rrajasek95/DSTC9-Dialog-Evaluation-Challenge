@@ -1,14 +1,9 @@
 import argparse
 import os
 from collections import namedtuple
-from tqdm.auto import tqdm
 
 import pandas as pd
-from transformers import AutoTokenizer
-
-from utils import add_tokens_to_vocabulary
-
-from constants import SWBD_ADDITIONAL_TOKENS
+from tqdm.auto import tqdm
 
 TOPICAL_CHAT_SPLITS = (
     "train",
