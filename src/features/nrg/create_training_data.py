@@ -75,6 +75,8 @@ def prepare_training_instance_from_example(tokenizer, example, data_prep_paramet
     training_instances.append(
         prepare_input_from_example_and_response(tokenizer, example, example.response, data_prep_parameters, is_ground_truth=True))
 
+    return training_instances
+
 
 def prepare_training_data(training_features_path, pretrained_model_checkpoint, path_to_output_tokenizer,
                           path_to_output_train_data, data_prep_parameters):
