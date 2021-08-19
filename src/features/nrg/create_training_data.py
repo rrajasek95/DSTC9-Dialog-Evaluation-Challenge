@@ -11,13 +11,17 @@ from constants import SWBD_ADDITIONAL_TOKENS, SPECIAL_TOKENS
 from utils import add_tokens_to_vocabulary
 
 
-def prepare_input_from_example_and_response(tokenizer, example, response, is_ground_truth=False):
+def prepare_input_from_example_and_response(tokenizer, example, response, data_prep_parameters, is_ground_truth=False):
     bos, eos, speaker1, speaker2, end, pad, eot = tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS)
 
     encoded_dialog_acts = tokenizer.encode([f"<{da}>" for da in example.response_dialog_acts])
 
     if example.knowledge:
-        encoded_knowledge = tokenizer.encode(example.knowledge) + tokenizer.convert_tokens_to_ids(["_fact"])
+        # Some knowledge sentences can greatly exceed the length of the input sequence
+        # truncate upto a maximum length
+        knowledge_tokens = tokenizer.encode(example.knowledge)
+        truncated_knowledge = knowledge_tokens[:min(data_prep_parameters["max_knowledge_length"], len(knowledge_tokens))]
+        encoded_knowledge = truncated_knowledge + tokenizer.convert_tokens_to_ids(["_fact"])
     else:
         encoded_knowledge = tokenizer.convert_tokens_to_ids(["_nofact"])
 
@@ -51,7 +55,7 @@ def prepare_input_from_example_and_response(tokenizer, example, response, is_gro
     return instance
 
 
-def prepare_training_instance_from_example(tokenizer, example):
+def prepare_training_instance_from_example(tokenizer, example, data_prep_parameters):
     """
     Constructs ground-truth and negative samples from the provided example.
 
@@ -66,13 +70,14 @@ def prepare_training_instance_from_example(tokenizer, example):
     """
 
     training_instances = [
-        prepare_input_from_example_and_response(tokenizer, example, negative_sample, is_ground_truth=False)
+        prepare_input_from_example_and_response(tokenizer, example, negative_sample, data_prep_parameters, is_ground_truth=False)
         for negative_sample in example.negative_samples]
     training_instances.append(
-        prepare_input_from_example_and_response(tokenizer, example, example.response, is_ground_truth=True))
+        prepare_input_from_example_and_response(tokenizer, example, example.response, data_prep_parameters, is_ground_truth=True))
 
 
-def prepare_training_data(training_features_path, pretrained_model_checkpoint, path_to_output_tokenizer, path_to_output_train_data):
+def prepare_training_data(training_features_path, pretrained_model_checkpoint, path_to_output_tokenizer,
+                          path_to_output_train_data, data_prep_parameters):
     tokenizer = GPT2Tokenizer.from_pretrained(pretrained_model_checkpoint)
 
     add_tokens_to_vocabulary(tokenizer, SWBD_ADDITIONAL_TOKENS)
@@ -83,7 +88,7 @@ def prepare_training_data(training_features_path, pretrained_model_checkpoint, p
 
     training_instances = []
     for example in tqdm(training_features.itertuples(name='Example')):
-        training_instances.append(prepare_training_instance_from_example(tokenizer, example))
+        training_instances.append(prepare_training_instance_from_example(tokenizer, example, data_prep_parameters))
 
     # Make parent directory
     os.makedirs(os.path.dirname(path_to_output_train_data), exist_ok=True)
@@ -98,7 +103,15 @@ if __name__ == '__main__':
     parser.add_argument('--pretrained_model_checkpoint', default='gpt2-medium')
     parser.add_argument('--path_to_output_tokenizer', default='data/processed/swbd_pd_nrg/tokenizer')
     parser.add_argument('--path_to_output_train_data', default='data/processed/swbd_pd_nrg/training_data.pkl')
+    parser.add_argument('--max_knowledge_length', default=200, help='Maximum number of knowledge tokens to include')
 
     args = parser.parse_args()
 
-    prepare_training_data(args.training_features_path, args.pretrained_model_checkpoint, args.path_to_output_tokenizer, args.path_to_output_train_data)
+    data_prep_parameters = {
+        "max_knowledge_length": args.max_knowledge_length
+    }
+    prepare_training_data(args.training_features_path,
+                          args.pretrained_model_checkpoint,
+                          args.path_to_output_tokenizer,
+                          args.path_to_output_train_data,
+                          data_prep_parameters)
