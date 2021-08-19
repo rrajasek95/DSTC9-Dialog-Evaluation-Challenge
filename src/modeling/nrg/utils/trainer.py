@@ -1,4 +1,7 @@
+import math
+
 import torch
+from torch.nn import CrossEntropyLoss
 from torch.nn.utils import clip_grad_norm_
 from tqdm.auto import tqdm
 
@@ -29,6 +32,8 @@ class GPT2DoubleHeadLMTrainer:
         self.log_every_n = log_every_n
         self.save_every_n = save_every_n
         self.max_gradient_norm = max_gradient_norm
+
+        self.ce_loss = CrossEntropyLoss(ignore_index=-100)
 
     def _train(self, train_loader):
         self.model.train()
@@ -64,8 +69,28 @@ class GPT2DoubleHeadLMTrainer:
     def _eval(self, val_loader):
         self.model.eval()
 
-    def train(self, train_loader, n_epochs):
+        running_nll_loss = 0.
+
+        with torch.no_grad():
+            for i, batch in tqdm(enumerate(val_loader)):
+                input_ids, mc_token_ids, lm_labels, mc_labels, token_type_ids = batch
+                # if we dont send labels to model, it doesnt return losses
+                lm_logits, mc_logits, *_ = self.model(
+                    input_ids, token_type_ids=token_type_ids, mc_token_ids=mc_token_ids,return_dict=False
+                )
+
+                lm_logits_flat_shifted = lm_logits[..., :-1, :].contiguous().view(-1, lm_logits.size(-1))
+                lm_labels_flat_shifted = lm_labels[..., 1:].contiguous().view(-1)
+
+                loss = self.ce_loss(lm_logits_flat_shifted, lm_labels_flat_shifted)
+
+                running_nll_loss += (float(loss) - running_nll_loss) / (i + 1)
+
+        print(f"Validation Loss: {running_nll_loss}")
+        print(f"Perplexity: {math.exp(running_nll_loss)}")
+
+    def train(self, train_loader, val_loader, n_epochs):
 
         for epoch in range(n_epochs):
             self._train(train_loader)
-            # self._eval(val_loader)
+            self._eval(val_loader)

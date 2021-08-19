@@ -21,28 +21,32 @@ def load_model_and_tokenizer(model_checkpoint_path, tokenizer_path):
     return gpt2_model, gpt2_tokenizer
 
 
-def load_training_data(train_data_path):
+def load_data(train_data_path):
     with open(train_data_path, 'rb') as train_data_file:
         training_data = pickle.load(train_data_file)
         return PdNrgDataset(training_data)
 
 
-def train_model(model, tokenizer, training_dataset, training_configuration):
+def train_model(model, tokenizer, training_dataset, validation_dataset, training_configuration):
     optimizer = AdamW(model.parameters(), lr=training_configuration["lr"], correct_bias=True)
 
     data_collate_fn = lambda batch: collate_double_heads_data(batch, 0)
 
     train_loader = DataLoader(training_dataset, batch_size=training_configuration["train_batch_size"],
                               collate_fn=data_collate_fn, shuffle=True)
+    valid_loader = DataLoader(validation_dataset, batch_size=training_configuration["valid_batch_size"],
+                              collate_fn=data_collate_fn, shuffle=True)
 
     trainer = GPT2DoubleHeadLMTrainer(model, optimizer, log_every_n=training_configuration['log_every_n'])
-    trainer.train(train_loader, 1)
+    trainer.train(train_loader, valid_loader, 1)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--experiment_name', type=str, required=True, help="Name of the experiment ran")
-    parser.add_argument('--data_path', type=str, default='data/processed/swbd_pd_nrg/training_data.pkl')
+    parser.add_argument('--training_data_path', type=str, default='data/processed/swbd_pd_nrg/training/training.pkl')
+    parser.add_argument('--validation_data_path', type=str, default='data/processed/swbd_pd_nrg/training/validation.pkl')
+
     parser.add_argument("--model_checkpoint_path",
                         type=str,
                         default="gpt2-medium",
@@ -67,7 +71,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     model, tokenizer = load_model_and_tokenizer(args.model_checkpoint_path, args.tokenizer_path)
-    training_examples = load_training_data(args.data_path)
+    training_examples = load_data(args.training_data_path)
+    validation_examples = load_data(args.validation_data_path)
 
     training_configuration = {
         "lr": args.lr,
@@ -78,4 +83,4 @@ if __name__ == '__main__':
         "save_every_n": args.save_every_n
     }
 
-    train_model(model, tokenizer, training_examples, training_configuration)
+    train_model(model, tokenizer, training_examples, validation_examples, training_configuration)
