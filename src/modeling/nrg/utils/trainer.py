@@ -1,4 +1,5 @@
 import math
+import os.path
 
 import torch
 from torch.nn import CrossEntropyLoss
@@ -9,6 +10,7 @@ class GPT2DoubleHeadLMTrainer:
     def __init__(self,
                  model,
                  optimizer,
+                 device="cpu",
                  lm_weight=1.0,
                  mc_weight=1.0,
                  gradient_accumulation_steps=1,
@@ -16,10 +18,15 @@ class GPT2DoubleHeadLMTrainer:
                  writer=None,
                  log_every_n=500,
                  save_every_n=1800,
-                 max_gradient_norm=1.0):
+                 eval_every_n=3600,
+                 max_gradient_norm=1.0,
+                 model_checkpoint_directory=None):
 
         self.model = model
         self.optimizer = optimizer
+        self.device = device
+
+        self.model.to(device)
 
         self.scheduler = scheduler
         self.writer = writer
@@ -31,11 +38,20 @@ class GPT2DoubleHeadLMTrainer:
 
         self.log_every_n = log_every_n
         self.save_every_n = save_every_n
+        self.eval_every_n = eval_every_n
         self.max_gradient_norm = max_gradient_norm
 
         self.ce_loss = CrossEntropyLoss(ignore_index=-100)
 
-    def _train(self, train_loader):
+        self.model_checkpoint_directory = model_checkpoint_directory
+
+    def _save_model_checkpoint(self, checkpoint_index):
+        if self.model_checkpoint_directory:
+            os.makedirs(self.model_checkpoint_directory, exist_ok=True)
+            self.model.save_pretrained(os.path.join(self.model_checkpoint_directory, str(checkpoint_index)))
+
+
+    def _train(self, train_loader, val_loader):
         self.model.train()
 
         self.optimizer.zero_grad()
@@ -43,7 +59,7 @@ class GPT2DoubleHeadLMTrainer:
         epoch_running_loss = 0.
 
         for i, batch in tqdm(enumerate(train_loader)):
-
+            batch = (tensor.to(self.device) for tensor in batch)
             input_ids, mc_token_ids, labels, mc_labels, token_type_ids = batch
             lm_loss, mc_loss, *_ = self.model(
                 input_ids, token_type_ids=token_type_ids, mc_token_ids=mc_token_ids,
@@ -63,6 +79,12 @@ class GPT2DoubleHeadLMTrainer:
             if (i + 1) % self.log_every_n == 0:
                 print(f"Step: {i + 1} \t Loss: {epoch_running_loss}")
 
+            if (i + 1) % self.eval_every_n == 0:
+                self._eval(val_loader)
+
+            if (i + 1) % self.save_every_n == 0:
+                self._save_model_checkpoint(i + 1)
+
 
 
 
@@ -73,6 +95,7 @@ class GPT2DoubleHeadLMTrainer:
 
         with torch.no_grad():
             for i, batch in tqdm(enumerate(val_loader)):
+                batch = (tensor.to(self.device) for tensor in batch)
                 input_ids, mc_token_ids, lm_labels, mc_labels, token_type_ids = batch
                 # if we dont send labels to model, it doesnt return losses
                 lm_logits, mc_logits, *_ = self.model(
@@ -92,5 +115,5 @@ class GPT2DoubleHeadLMTrainer:
     def train(self, train_loader, val_loader, n_epochs):
 
         for epoch in range(n_epochs):
-            self._train(train_loader)
+            self._train(train_loader, val_loader)
             self._eval(val_loader)

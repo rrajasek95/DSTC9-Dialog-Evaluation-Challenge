@@ -27,7 +27,7 @@ def load_data(train_data_path):
         return PdNrgDataset(training_data)
 
 
-def train_model(model, tokenizer, training_dataset, validation_dataset, training_configuration):
+def train_model(model, tokenizer, device, training_dataset, validation_dataset, training_configuration):
     optimizer = AdamW(model.parameters(), lr=training_configuration["lr"], correct_bias=True)
 
     data_collate_fn = lambda batch: collate_double_heads_data(batch, 0)
@@ -37,7 +37,13 @@ def train_model(model, tokenizer, training_dataset, validation_dataset, training
     valid_loader = DataLoader(validation_dataset, batch_size=training_configuration["valid_batch_size"],
                               collate_fn=data_collate_fn, shuffle=True)
 
-    trainer = GPT2DoubleHeadLMTrainer(model, optimizer, log_every_n=training_configuration['log_every_n'])
+    trainer = GPT2DoubleHeadLMTrainer(model, optimizer, device,
+                                      gradient_accumulation_steps=training_configuration['gradient_accumulation_steps'],
+                                      log_every_n=training_configuration["log_every_n"],
+                                      save_every_n=training_configuration["save_every_n"],
+                                      eval_every_n=training_configuration["eval_every_n"],
+                                      model_checkpoint_directory=training_configuration["model_checkpoint_directory"])
+
     trainer.train(train_loader, valid_loader, 1)
 
 
@@ -67,7 +73,10 @@ if __name__ == '__main__':
                                help="Frequency of logging (in number of train steps)")
     training_args.add_argument('--save_every_n', type=int, default=1800,
                                help="Frequency of checkpoint save (in number of train steps)")
-
+    training_args.add_argument('--eval_every_n', type=int, default=3600,
+                               help="Frequency of model evaluation")
+    training_args.add_argument('--model_checkpoint_directory', default='models/swbd_pd_nrg/v1/')
+    training_args.add_argument('--gradient_accumulation_steps', type=int, default=8)
     args = parser.parse_args()
 
     model, tokenizer = load_model_and_tokenizer(args.model_checkpoint_path, args.tokenizer_path)
@@ -80,7 +89,10 @@ if __name__ == '__main__':
         "train_batch_size": args.train_batch_size,
         "valid_batch_size": args.valid_batch_size,
         "log_every_n": args.log_every_n,
-        "save_every_n": args.save_every_n
+        "save_every_n": args.save_every_n,
+        "eval_every_n": args.eval_every_n,
+        "model_checkpoint_directory": args.model_checkpoint_directory,
+        "gradient_accumulation_steps": args.gradient_accumulation_steps
     }
 
-    train_model(model, tokenizer, training_examples, validation_examples, training_configuration)
+    train_model(model, tokenizer, args.device, training_examples, validation_examples, training_configuration)
