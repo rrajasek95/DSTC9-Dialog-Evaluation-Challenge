@@ -1,0 +1,4 @@
+outs:
+- md5: 0f3dfc3e616356f092d63cdc29487cf3
+  size: 38956533
+  path: valid_freq_embeddings.pkl

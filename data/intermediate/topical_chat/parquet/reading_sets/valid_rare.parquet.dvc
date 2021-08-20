@@ -1,0 +1,4 @@
+outs:
+- md5: b427ee6c03e80353b35de7858076c05b
+  size: 1835754
+  path: valid_rare.parquet

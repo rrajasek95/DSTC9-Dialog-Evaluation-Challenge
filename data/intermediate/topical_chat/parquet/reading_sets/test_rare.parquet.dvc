@@ -1,0 +1,4 @@
+outs:
+- md5: 7be7d29686a9b5029a1d18169597c257
+  size: 1746912
+  path: test_rare.parquet

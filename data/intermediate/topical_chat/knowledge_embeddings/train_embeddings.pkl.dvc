@@ -1,0 +1,4 @@
+outs:
+- md5: 3031d01635e7af850b3bb921b4b99417
+  size: 627389057
+  path: train_embeddings.pkl

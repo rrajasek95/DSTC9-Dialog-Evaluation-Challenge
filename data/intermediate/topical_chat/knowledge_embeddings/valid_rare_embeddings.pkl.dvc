@@ -1,0 +1,4 @@
+outs:
+- md5: 268c879b72370cc6a5fe1c733e91ec2d
+  size: 38950111
+  path: valid_rare_embeddings.pkl

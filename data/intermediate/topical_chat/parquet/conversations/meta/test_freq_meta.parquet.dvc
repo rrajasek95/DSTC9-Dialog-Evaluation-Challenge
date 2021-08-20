@@ -1,0 +1,4 @@
+outs:
+- md5: c9b84c9b47151d5afd2aaa9917c7c256
+  size: 36749
+  path: test_freq_meta.parquet

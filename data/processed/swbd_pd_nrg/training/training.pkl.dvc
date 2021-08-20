@@ -1,0 +1,4 @@
+outs:
+- md5: 12a96ec520abd0dfefb50512b0761543
+  size: 335574055
+  path: training.pkl

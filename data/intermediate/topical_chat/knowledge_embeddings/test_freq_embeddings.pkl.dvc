@@ -1,0 +1,4 @@
+outs:
+- md5: 52ef93d62660a9065841505329778f70
+  size: 40185480
+  path: test_freq_embeddings.pkl
