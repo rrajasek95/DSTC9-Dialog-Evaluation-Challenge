@@ -72,6 +72,9 @@ class GPT2DoubleHeadLMTrainer:
             loss.backward()
             clip_grad_norm_(self.model.parameters(), self.max_gradient_norm)
 
+            self.training_state["global_step_index"] += 1
+            self.writer.add_scalar('Loss/train', epoch_running_loss, self.training_state["global_step_index"])
+
             if (i + 1) % self.gradient_accumulation_steps == 0:
                 self.optimizer.step()
                 self.optimizer.zero_grad()
@@ -84,6 +87,10 @@ class GPT2DoubleHeadLMTrainer:
 
             if (i + 1) % self.save_every_n == 0:
                 self._save_model_checkpoint(i + 1)
+
+        print("\nTraining epoch completed!")
+        print(f"Epoch Loss: {epoch_running_loss}")
+
 
 
 
@@ -109,11 +116,27 @@ class GPT2DoubleHeadLMTrainer:
 
                 running_nll_loss += (float(loss) - running_nll_loss) / (i + 1)
 
+                self.training_state["global_validation_step_index"] += 1
+                self.writer.add_scalar('Loss/valid', running_nll_loss, self.training_state["global_validation_step_index"])
+
+        print("\nValidation Completed!")
         print(f"Validation Loss: {running_nll_loss}")
         print(f"Perplexity: {math.exp(running_nll_loss)}")
 
+        # Use validation loss for best model selection
+        if running_nll_loss < self.training_state["lowest_validation_loss"]:
+            self.training_state["lowest_validation_loss"] = running_nll_loss
+            print("Current validation loss lower than the lowest loss. Saving model checkpoint")
+            self._save_model_checkpoint("best")
+
     def train(self, train_loader, val_loader, n_epochs):
+        self.training_state = {
+            "lowest_validation_loss": float('inf'),
+            "global_step_index": 0,
+            "global_validation_step_index": 0
+        }
 
         for epoch in range(n_epochs):
+            print(f"\nEpoch: {epoch}")
             self._train(train_loader, val_loader)
             self._eval(val_loader)

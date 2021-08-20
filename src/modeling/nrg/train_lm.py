@@ -1,9 +1,11 @@
 import argparse
-import functools
+import json
+import os
 import pickle
 
 import torch.cuda
 from torch.utils.data.dataloader import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 
 from transformers import GPT2Tokenizer, AdamW, GPT2DoubleHeadsModel
 
@@ -37,19 +39,32 @@ def train_model(model, tokenizer, device, training_dataset, validation_dataset, 
     valid_loader = DataLoader(validation_dataset, batch_size=training_configuration["valid_batch_size"],
                               collate_fn=data_collate_fn, shuffle=True)
 
+    current_experiment_path = os.path.join(training_configuration["experiments_path"],
+                                           training_configuration["experiment_name"])
+
+    summary_writer = SummaryWriter(current_experiment_path)
     trainer = GPT2DoubleHeadLMTrainer(model, optimizer, device,
                                       gradient_accumulation_steps=training_configuration['gradient_accumulation_steps'],
                                       log_every_n=training_configuration["log_every_n"],
                                       save_every_n=training_configuration["save_every_n"],
                                       eval_every_n=training_configuration["eval_every_n"],
-                                      model_checkpoint_directory=training_configuration["model_checkpoint_directory"])
+                                      model_checkpoint_directory=training_configuration["model_checkpoint_directory"],
+                                      writer=summary_writer)
+    print("Model summary:")
+    print(model)
+    print("Training configuration:")
+    for key, item in training_configuration.items():
+        print(key, ":", item)
+    print("optimizer:", optimizer)
 
-    trainer.train(train_loader, valid_loader, 1)
+    with open(os.path.join(current_experiment_path, "training_parameters.json"), "w") as training_parameters_file:
+        json.dump(training_configuration, training_parameters_file)
+
+    trainer.train(train_loader, valid_loader, training_configuration["num_epochs"])
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--experiment_name', type=str, required=True, help="Name of the experiment ran")
     parser.add_argument('--training_data_path', type=str, default='data/processed/swbd_pd_nrg/training/training.pkl')
     parser.add_argument('--validation_data_path', type=str, default='data/processed/swbd_pd_nrg/training/validation.pkl')
 
@@ -63,6 +78,11 @@ if __name__ == '__main__':
 
     parser.add_argument('--device', default="cuda" if torch.cuda.is_available() else "cpu")
 
+    experiment_args = parser.add_argument_group('Experiment Arguments', 'Arguments for setting up the experiment')
+    experiment_args.add_argument('--experiment_name', type=str, required=True, help="Name of the experiment ran")
+    experiment_args.add_argument('--model_checkpoint_directory', default='models/swbd_pd_nrg/v1/')
+    experiment_args.add_argument('--experiments_path', default='experiments/')
+
     training_args = parser.add_argument_group('Training Parameters',
                                               'Lists the parameters for training the model')
     training_args.add_argument('--lr', type=float, default=6.25e-5, help="Base learning rate for training")
@@ -75,7 +95,7 @@ if __name__ == '__main__':
                                help="Frequency of checkpoint save (in number of train steps)")
     training_args.add_argument('--eval_every_n', type=int, default=3600,
                                help="Frequency of model evaluation")
-    training_args.add_argument('--model_checkpoint_directory', default='models/swbd_pd_nrg/v1/')
+
     training_args.add_argument('--gradient_accumulation_steps', type=int, default=8)
     args = parser.parse_args()
 
@@ -84,6 +104,8 @@ if __name__ == '__main__':
     validation_examples = load_data(args.validation_data_path)
 
     training_configuration = {
+        "experiments_path": args.experiments_path,
+        "experiment_name": args.experiment_name,
         "lr": args.lr,
         "num_epochs": args.num_epochs,
         "train_batch_size": args.train_batch_size,
