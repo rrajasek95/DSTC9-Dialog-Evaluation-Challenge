@@ -8,9 +8,6 @@ DialogueAct_Tagger/
 DA_Classifier/
 
 # Source data files that don't need to be committed. They'll be DVC'ed.
-/data/external
-/data/intermediate
-/data/processed
 
 # Model checkpoints that don't need to be committed (they'll be separately DVC'ed)
 /models/
