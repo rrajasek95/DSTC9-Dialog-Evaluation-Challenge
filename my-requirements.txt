@@ -24,7 +24,7 @@ six==1.15.0
 smart-open==2.0.0
 sentencepiece==0.1.91
 tensorboard==2.2.2
-ujson==4.0.0
+ujson==5.4.0
 tqdm==4.46.1
 tokenizers==0.8.1rc1
 toolz==0.10.0
